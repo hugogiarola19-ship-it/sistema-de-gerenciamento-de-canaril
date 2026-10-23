@@ -172,6 +172,7 @@
 <header class="top">
   <h1>🐤 Canaril</h1>
   <span id="sync" class="sync" role="status"></span>
+  <button data-act="perfil" aria-label="Meu perfil de criador">👤</button>
   <button data-act="buscar" aria-label="Buscar anilha">🔍</button>
   <button data-act="menu" aria-label="Dados, exportação e ajuda">☰</button>
 </header>
@@ -259,13 +260,14 @@ function toast(msg) {
    ============================================================ */
 function blank() {
   return { aves: [], casais: [], posturas: [], ovos: [], chocos: [], chocoEventos: [], manejos: [], lembretes: [],
-           especies: [], clubes: [], lotesAnilhas: [], eventos: [], inscricoes: [],
+           especies: [], clubes: [], lotesAnilhas: [], eventos: [], inscricoes: [], perfil: {},
            cfg: { diasEclosao: 13, inicioTemporada: 7, ultimoBackup: '', especiePadrao: '' } };
 }
 /* Completa dados antigos: cria as espécies padrão e liga cada ave a uma espécie. Retorna true se mudou algo. */
 function migrate(d) {
   let ch = false;
   ['especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'].forEach(k => { if (!Array.isArray(d[k])) { d[k] = []; ch = true; } });
+  if (!d.perfil || typeof d.perfil !== 'object' || Array.isArray(d.perfil)) { d.perfil = {}; ch = true; }
   if (!d.especies.length) {
     d.especies = ESPECIES_PADRAO.map(e => ({ ...e, diasEclosao: e.id === 'esp-canario' && +d.cfg.diasEclosao ? +d.cfg.diasEclosao : e.diasEclosao }));
     ch = true;
@@ -330,7 +332,7 @@ async function pushCloud() {
     }
     for (const k of Object.keys(lastSent)) if (!ch[k]) { await cloud.doc('canaril/' + k).delete(); delete lastSent[k]; }
     cloudRev = uid();
-    await cloud.doc('canaril/meta').set({ chunks: keys, cfg: db.cfg, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
+    await cloud.doc('canaril/meta').set({ chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
     setSync('ok');
   } catch (e) {
     if (e && e.code === 'invalid_argument') setSync('ro'); else setSync('err', e);
@@ -340,7 +342,7 @@ async function pushCloud() {
 }
 async function pullCloud(meta) {
   const docs = await Promise.all(meta.chunks.map(k => cloud.doc('canaril/' + k).get()));
-  const nd = blank(); nd.cfg = { ...nd.cfg, ...(meta.cfg || {}) };
+  const nd = blank(); nd.cfg = { ...nd.cfg, ...(meta.cfg || {}) }; nd.perfil = { ...(meta.perfil || {}) };
   meta.chunks.forEach((k, i) => {
     const t = k.slice(0, k.lastIndexOf('-')), d = docs[i].data();
     if (d && Array.isArray(nd[t])) { nd[t].push(...JSON.parse(JSON.stringify(d.rows || []))); lastSent[k] = JSON.stringify(d); }
@@ -457,6 +459,8 @@ function previsao(p) {
   const base = ch && ch.dataInicio > ult ? ch.dataInicio : ult;
   return addDays(base, +espPostura(p).diasEclosao || 13);
 }
+/* Dia da incubação contado até a eclosão prevista (último ovo ou início do choco) */
+const diaIncubacao = p => (+espPostura(p).diasEclosao || 13) - diff(today(), previsao(p));
 function filCasal(a) {
   if (a.posturaId) { const p = postura(a.posturaId); if (p) return p.casalId; }
   const c = db.casais.find(c => norm(c.macho) === norm(a.pai) && norm(c.femea) === norm(a.mae));
@@ -586,6 +590,7 @@ function alertas() {
     const u = loteUso(l);
     if (u.total && u.livres <= 5) L.push({ n: 1, c: u.livres ? 'info' : 'warn', ic: '💍', tx: u.livres ? `Restam ${u.livres} anilha(s) no lote ${loteAnilha(l, l.inicio)}…` : `Lote ${loteAnilha(l, l.inicio)}… esgotado`, sub: clube(l.clubeId)?.nome || '', act: 'clubes' });
   });
+  if (db.aves.length && !db.perfil.nome) L.push({ n: 0, c: 'info', ic: '👤', tx: 'Complete seu perfil de criador', sub: 'Nome, criatório, contato e clubes', act: 'perfil' });
   if (db.aves.length) {
     const b = db.cfg.ultimoBackup, d = b ? diff(b, t) : null;
     if (d === null || d > 30) L.push({ n: 0, c: 'info', ic: '💾', tx: 'Faça um backup dos dados', sub: b ? `Último backup há ${d} dias` : 'Nenhum backup feito ainda', act: 'backup' });
@@ -652,6 +657,7 @@ VIEWS.home = () => {
   curList = homeBusca;
   return `
     ${storageOk ? '' : '<div class="alert a-bad"><div class="ic">⚠️</div><div>O navegador não está permitindo salvar. Exporte um backup antes de fechar a página.</div></div>'}
+    ${db.perfil.nome ? `<div class="li" data-act="perfil"><div class="sx sx-I">👤</div><div class="grow"><b>${esc(db.perfil.criatorio || db.perfil.nome)}</b><div class="mu">${esc(db.perfil.criatorio ? db.perfil.nome : '')}${db.perfil.criatorio && db.clubes.length ? ' · ' : ''}${db.clubes.length ? esc(db.clubes.map(c => c.sigla || c.nome).join(', ')) : ''}</div></div></div>` : ''}
     <input class="search" type="search" placeholder="🔍 Buscar pela anilha…" data-f="home.q" value="${esc(F.home.q)}" id="homeQ" autocomplete="off">
     <div id="list"></div>
     <div class="quick">
@@ -665,7 +671,7 @@ VIEWS.home = () => {
     <h2>Hoje · ${fmt(t)}</h2>
     ${L.length ? L.map(a => `<div class="alert a-${a.c}" data-act="${a.act}" data-id="${a.id || ''}"><div class="ic">${a.ic}</div><div class="grow"><b>${esc(a.tx)}</b><div class="mu">${esc(a.sub)}</div></div></div>`).join('') : '<div class="card mu">✅ Nenhum alerta para hoje.</div>'}
     ${chocos.length ? `<h2>Chocos em andamento</h2>${chocos.map(c => {
-      const p = postura(c.posturaId); const d = diff(c.dataInicio, t) + 1;
+      const p = postura(c.posturaId); const d = p ? diaIncubacao(p) : diff(c.dataInicio, t) + 1;
       return `<div class="li" data-act="choco" data-id="${c.posturaId}"><div class="sx sx-F">♀</div><div class="grow"><b>${esc(c.femea)}</b><div class="mu">Dia ${d} · eclosão prevista ${p ? fmt(previsao(p)) : '—'}</div></div><span class="bdg b-ac">🪺 ${d}/${p ? espPostura(p).diasEclosao : '—'}</span></div>`;
     }).join('')}` : ''}
     <h2>Plantel</h2>
@@ -778,7 +784,7 @@ function postCard(p, inSheet) {
       ${ativaP ? `<button class="egg add" data-act="addOvo" data-id="${p.id}" aria-label="Registrar ovo hoje">＋</button>` : ''}</div>
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
     ${ov.length ? `<div class="mu">Último ovo ${fmt(ultimoOvo(p))} · eclosão prevista <b>${fmt(previsao(p))}</b></div>` : ''}
-    ${ch ? `<div class="mu">🪺 Choco desde ${fmt(ch.dataInicio)} (${ch.status === 'chocando' ? 'dia ' + (diff(ch.dataInicio, t) + 1) : CHOCO[ch.status].toLowerCase()})</div>` : ''}
+    ${ch ? `<div class="mu">🪺 Choco desde ${fmt(ch.dataInicio)} (${ch.status === 'chocando' ? 'dia ' + diaIncubacao(p) + ' de ' + espPostura(p).diasEclosao : CHOCO[ch.status].toLowerCase()})</div>` : ''}
     ${fil.length ? `<div class="mu">🐣 ${fil.length} filhote(s): ${fil.map(a => `<button class="lk" data-act="ave" data-id="${a.id}">${esc(a.anilha)}</button>${a.situacao === 'morto' ? '†' : ''}`).join(', ')}</div>` : ''}
     ${p.obs ? `<div class="mu">📝 ${esc(p.obs)}</div>` : ''}
     <div class="acts">
@@ -1255,7 +1261,7 @@ function sChoco(pid) {
     html: () => {
       const p = postura(pid), ch = chocoDe(pid), t = today();
       if (!ch) return '';
-      const ev = eventosDe(ch.id), d = diff(ch.dataInicio, t) + 1;
+      const ev = eventosDe(ch.id), d = diaIncubacao(p);
       return `<h2>🪺 Choco — ${esc(ch.femea)}</h2>
         <div class="card"><div class="grid2">
           <div><span>Início do choco</span>${fmt(ch.dataInicio)}</div><div><span>Status</span>${CHOCO[ch.status]}</div>
@@ -1589,6 +1595,63 @@ function resultadosHTML() {
 /* ============================================================
    Cadastros: clubes, lotes de anilhas e espécies
    ============================================================ */
+/* Perfil do criador */
+function sPerfil() {
+  return {
+    html: () => {
+      const pf = db.perfil, t = today();
+      const local = [pf.cidade, pf.uf].filter(Boolean).join(' / ');
+      const esps = db.especies.filter(e => db.aves.some(a => ativa(a) && a.especieId === e.id)).map(e => e.nome);
+      const pod = db.inscricoes.filter(i => +i.colocacao >= 1 && +i.colocacao <= 3).length;
+      const I = (l, v) => v ? `<div><span>${l}</span>${esc(v)}</div>` : '';
+      return `<h2>👤 Meu perfil</h2>
+        ${pf.nome ? `<div class="card"><b style="font-size:17px">${esc(pf.criatorio || pf.nome)}</b>${pf.criatorio ? `<div class="mu">${esc(pf.nome)}</div>` : ''}
+          <div class="grid2" style="margin-top:10px">
+            ${I('Código do criatório', pf.codigo)}${I('Cidade', local)}${I('Telefone', pf.telefone)}${I('E-mail', pf.email)}${I('Registro SISPASS/IBAMA', pf.sispass)}${I('Cria desde', pf.desde)}
+          </div>${pf.obs ? `<p class="mu" style="margin-top:8px">📝 ${esc(pf.obs)}</p>` : ''}</div>`
+        : '<div class="card mu">Cadastre seus dados de criador: nome, criatório, contato e registro. Eles entram nas exportações e ajudam a identificar o plantel.</div>'}
+        <div class="acts"><button class="btn pri" data-act="editPerfil">${pf.nome ? '✏️ Editar perfil' : '＋ Preencher perfil'}</button></div>
+        <div class="kpis" style="margin-top:12px">
+          <div class="kpi"><b>${db.aves.filter(ativa).length}</b><span>aves ativas</span></div>
+          <div class="kpi"><b>${esps.length || '—'}</b><span>${esps.length === 1 ? 'espécie' : 'espécies'}</span></div>
+          <div class="kpi"><b>${db.inscricoes.length}</b><span>inscrições em campeonatos</span></div>
+          <div class="kpi"><b>${pod}</b><span>pódios</span></div>
+        </div>
+        ${esps.length ? `<p class="mu">Cria: ${esc(esps.join(', '))}</p>` : ''}
+        <h3>Clubes onde sou sócio (${db.clubes.length})</h3>
+        ${db.clubes.map(c => {
+          const d = c.anuidadeValidade ? diff(t, c.anuidadeValidade) : null;
+          const b = d === null ? '<span class="bdg">Sem anuidade</span>' : d < 0 ? '<span class="bdg b-bad">Vencida</span>' : d <= 30 ? `<span class="bdg b-warn">Vence em ${d}d</span>` : '<span class="bdg b-ok">Em dia</span>';
+          return `<div class="li" data-act="editClube" data-id="${c.id}"><div class="sx sx-I">🏛️</div><div class="grow"><b>${esc(c.nome)}</b>${c.sigla ? ` <span class="mu">(${esc(c.sigla)})</span>` : ''}
+            <div class="mu">${c.federacao ? esc(c.federacao) + ' · ' : ''}Nº de criador: ${esc(c.numeroCriador || '—')}${c.anuidadeValidade ? ' · anuidade até ' + fmt(c.anuidadeValidade) : ''}</div></div>${b}</div>`;
+        }).join('') || '<div class="card mu">Nenhum clube cadastrado.</div>'}
+        <div class="acts"><button class="btn" data-act="novoClube">＋ Clube onde sou sócio</button>${db.clubes.length ? '<button class="btn" data-act="clubes">💍 Lotes de anilhas</button>' : ''}</div>`;
+    }
+  };
+}
+function formPerfil() {
+  openForm({
+    title: 'Meu perfil de criador', data: { ...db.perfil },
+    fields: [
+      { k: 'nome', l: 'Seu nome', req: 1 },
+      { k: 'criatorio', l: 'Nome do criatório', ph: 'Ex.: Criatório Canto Dourado' },
+      { k: 'codigo', l: 'Código / sigla do criatório', ph: 'Ex.: HG (usado nas anilhas)' },
+      { k: 'cidade', l: 'Cidade' },
+      { k: 'uf', l: 'UF', ph: 'Ex.: PR' },
+      { k: 'telefone', l: 'Telefone / WhatsApp', t: 'tel' },
+      { k: 'email', l: 'E-mail', t: 'email' },
+      { k: 'sispass', l: 'Registro SISPASS/IBAMA (se cria espécies nativas)' },
+      { k: 'desde', l: 'Cria desde (ano)', t: 'number' },
+      { k: 'obs', l: 'Observações', t: 'textarea' }
+    ],
+    save: o => {
+      if (o.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) return 'E-mail inválido';
+      o.uf = (o.uf || '').toUpperCase().slice(0, 2);
+      db.perfil = { ...db.perfil, ...o };
+      toast('Perfil salvo');
+    }
+  });
+}
 function sClubes() {
   return {
     html: () => `<h2>🏛️ Clubes e anilhas</h2>
@@ -1717,6 +1780,7 @@ const EXP = {
   chocoEventos: { n: 'Acompanhamento choco', rows: () => db.chocoEventos, cols: [['Fêmea', e => db.chocos.find(c => c.id === e.chocoId)?.femea || ''], ['Data', e => fmt(e.data)], ['Alimentação extra', e => e.alimentacaoExtra ? 'Sim' : 'Não'], ['Comportamento', e => SINAIS[e.sinal] || e.sinal], ['Observação', 'obs']] },
   filhotes: { n: 'Filhotes', rows: () => db.aves.filter(a => a.origem === 'nascido'), cols: [['Anilha', 'anilha'], ['Nascimento', a => fmt(a.dataNascimento)], ['Temporada', a => temporada(a.dataNascimento)], ['Pai', 'pai'], ['Mãe', 'mae'], ['Casal', a => filCasal(a) ? casalNome(casal(filCasal(a))) : ''], ['Sexo', a => SEXO[a.sexo]], ['Status', a => cap(statusFilhote(a))], ['Data saída/morte', a => a.dataSaida ? fmt(a.dataSaida) : ''], ['Motivo', 'motivoSaida']] },
   manejos: { n: 'Manejo', rows: () => db.manejos, cols: [['Data', m => fmt(m.data)], ['Anilha', 'anilha'], ['Local', 'local'], ['Tipo', m => MANEJO[m.tipo]], ['Peso (g)', 'peso'], ['Produto', 'produto'], ['Dose', 'dose'], ['Observações', 'obs']] },
+  perfil: { n: 'Perfil do criador', rows: () => [db.perfil], cols: [['Nome', 'nome'], ['Criatório', 'criatorio'], ['Código do criatório', 'codigo'], ['Cidade', 'cidade'], ['UF', 'uf'], ['Telefone', 'telefone'], ['E-mail', 'email'], ['Registro SISPASS/IBAMA', 'sispass'], ['Cria desde', 'desde'], ['Clubes', () => db.clubes.map(c => `${c.nome}${c.numeroCriador ? ' (nº ' + c.numeroCriador + ')' : ''}`).join('; ')], ['Observações', 'obs']] },
   especies: { n: 'Espécies', rows: () => db.especies, cols: [['Espécie', 'nome'], ['Incubação (dias)', 'diasEclosao'], ['Anilhamento (dia)', 'diaAnilhamento'], ['Sexagem (dias)', 'maturidadeDias'], ['Diâmetro da anilha', 'diametroAnilha'], ['Aves ativas', e => db.aves.filter(a => ativa(a) && a.especieId === e.id).length], ['Observações', 'obs']] },
   clubes: { n: 'Clubes', rows: () => db.clubes, cols: [['Clube', 'nome'], ['Sigla', 'sigla'], ['Federação', 'federacao'], ['Nº de criador', 'numeroCriador'], ['Anuidade até', c => c.anuidadeValidade ? fmt(c.anuidadeValidade) : ''], ['Contato', 'contato'], ['Observações', 'obs']] },
   lotesAnilhas: { n: 'Lotes de anilhas', rows: () => db.lotesAnilhas, cols: [['Clube', l => clube(l.clubeId)?.nome || ''], ['Ano', 'ano'], ['Espécie', l => especie(l.especieId)?.nome || 'Qualquer'], ['Primeira', l => loteAnilha(l, l.inicio)], ['Última', l => loteAnilha(l, l.fim)], ['Diâmetro', 'diametro'], ['Usadas', l => loteUso(l).usadas], ['Livres', l => loteUso(l).livres], ['Próxima livre', l => loteUso(l).prox]] },
@@ -1799,7 +1863,7 @@ function sDados() {
   return {
     html: () => `<h2>Dados e configurações</h2>
       <div class="card"><h3 style="margin-top:0">Cadastros</h3>
-        <div class="acts"><button class="btn" data-act="clubes">🏛️ Clubes e anilhas (${db.clubes.length})</button><button class="btn" data-act="especies">🐦 Espécies (${db.especies.length})</button></div></div>
+        <div class="acts"><button class="btn" data-act="perfil">👤 Meu perfil</button><button class="btn" data-act="clubes">🏛️ Clubes e anilhas (${db.clubes.length})</button><button class="btn" data-act="especies">🐦 Espécies (${db.especies.length})</button></div></div>
       <div class="card"><h3 style="margin-top:0">Exportar</h3>
         <button class="btn pri full" data-act="xls">⬇️ Excel .xlsx (todas as tabelas + indicadores)</button>
         <p class="mu" style="margin:10px 0 6px">CSV por tabela (abre no Excel / Google Planilhas):</p>
@@ -1872,7 +1936,8 @@ function seed() {
 function seedNow() {
   const T = today(), D = n => addDays(T, n);
   const cfg = { ...db.cfg, ultimoBackup: T };
-  db = blank(); db.cfg = cfg; migrate(db);
+  const perfil = db.perfil || {};
+  db = blank(); db.cfg = cfg; db.perfil = perfil; migrate(db);
   const base = { especieId: 'esp-canario', clubeId: '', origem: 'comprado', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '', dataNascimento: '', pai: '', mae: '', posturaId: '', sexo: 'I', cor: '', mutacao: '', linhagem: '', situacao: 'ativo', local: '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' };
   const A = o => { const a = { id: uid(), ...base, ...o }; db.aves.push(a); return a; };
   [
@@ -1997,6 +2062,7 @@ const ACT = {
   close: () => { stack.length = 0; paint(); },
   fdel: () => { const top = stack[stack.length - 1]; if (top.del) top.del(); },
   menu: () => showSheet(sDados()),
+  perfil: () => showSheet(sPerfil()), editPerfil: () => formPerfil(),
   buscar: () => { view = 'aves'; render(); window.scrollTo(0, 0); $('#avesQ').focus(); },
   novaAve: () => formAve(), ave: id => showSheet(sAve(id)), editAve: id => formAve(aveById(id)),
   pesar: id => formManejo({ alvo: 'ave', anilha: aveById(id).anilha, tipo: 'pesagem' }),
@@ -2045,7 +2111,7 @@ const ACT = {
   goSexoI: () => { Object.assign(F.aves, { q: '', sit: 'ativos', sexo: 'I', cor: '', temp: '', casal: '' }); view = 'aves'; render(); },
   csv: k => exportCSV(k), xls: () => exportXLS(), backup: () => backup(), restore: () => $('#fileIn').click(),
   seed: () => seed(), cfg: () => formCfg(), ajuda: () => showSheet(sAjuda()),
-  wipe: () => ask('Apagar TODOS os dados? Faça um backup antes — esta ação não pode ser desfeita.', () => { const c = db.cfg; db = blank(); db.cfg = c; migrate(db); save(); stack.length = 0; paint(); view = 'home'; render(); }, { ok: 'Apagar tudo', danger: true }),
+  wipe: () => ask('Apagar TODOS os dados (aves, reprodução, manejo, clubes e campeonatos)? Seu perfil é mantido. Faça um backup antes — esta ação não pode ser desfeita.', () => { const c = db.cfg, pf = db.perfil; db = blank(); db.cfg = c; db.perfil = pf; migrate(db); save(); stack.length = 0; paint(); view = 'home'; render(); }, { ok: 'Apagar tudo', danger: true }),
 };
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');

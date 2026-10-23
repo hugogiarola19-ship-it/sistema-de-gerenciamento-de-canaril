@@ -118,6 +118,9 @@ Aplicar um manejo a um viveiro ou a “todas as ativas” cria um registro por a
 - **eventos**: `nome`, `tipo` (`exposicao` \| `canto` \| `outro`), `clubeId` ou `organizador`, `local`, `dataInicio`, `dataFim`, `prazoInscricao`, `taxa`, `obs`, `checklist` (lista de itens de preparação com `t` e `ok`).
 - **inscricoes**: `eventoId` → Eventos, `modalidade` (`individual` \| `equipe`), `anilhas` (lista de anilhas → Aves), `classe`, `juiz`, `pontos`, `colocacao`, `premio`, `obs` (notas da ficha).
 
+### Perfil do criador (`perfil`)
+Objeto único: `nome`, `criatorio`, `codigo` (sigla usada nas anilhas), `cidade`, `uf`, `telefone`, `email`, `sispass` (registro SISPASS/IBAMA, para espécies nativas), `desde` (ano), `obs`. Os clubes em que o criador é sócio são a tabela Clubes. O perfil é mantido ao carregar dados de exemplo e ao “Apagar tudo”.
+
 ### Configurações (`cfg`)
 `inicioTemporada` (mês, padrão 7 = julho; 1 = ano civil), `especiePadrao`, `ultimoBackup`. (`diasEclosao` é legado: os dias de incubação agora ficam em cada espécie.)
 
