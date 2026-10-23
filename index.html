@@ -54,7 +54,7 @@
   .wrap { flex-wrap: wrap; }
 
   .tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; background: var(--card); border-top: 1px solid var(--bd); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
-  .tabs button { flex: 1; padding: 8px 2px 10px; font-size: 11px; color: var(--mu); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .tabs button { flex: 1; min-width: 0; padding: 8px 1px 10px; font-size: 10.5px; color: var(--mu); display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .tabs button span { font-size: 21px; line-height: 1.1; }
   .tabs button.on { color: var(--tx); font-weight: 600; }
   .tabs button.on span { transform: scale(1.1); }
@@ -161,6 +161,8 @@
   #toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; background: var(--tx); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100% - 32px); text-align: center; }
   #toast.on { opacity: 1; }
   .empty { text-align: center; color: var(--mu); padding: 28px 12px; }
+  label.ck { padding: 6px 0; cursor: pointer; }
+  label.ck .done { text-decoration: line-through; color: var(--mu); }
   .help ol, .help ul { padding-left: 20px; margin: 6px 0 12px; }
   .help li { margin-bottom: 4px; }
 </style>
@@ -181,6 +183,7 @@
   <button data-act="tab" data-id="aves"><span>🐤</span>Aves</button>
   <button data-act="tab" data-id="repro"><span>🥚</span>Reprodução</button>
   <button data-act="tab" data-id="manejo"><span>🩺</span>Manejo</button>
+  <button data-act="tab" data-id="torneios"><span>🏆</span>Torneios</button>
   <button data-act="tab" data-id="rel"><span>📊</span>Relatórios</button>
 </nav>
 
@@ -208,6 +211,16 @@ const MANEJO_IC = { pesagem: '⚖️', vermifugacao: '💊', tratamento: '💉',
 const MANEJO_POR_AVE = ['pesagem', 'vermifugacao', 'tratamento', 'vitamina', 'anilhamento', 'veterinario'];
 const SINAIS = { normal: 'Normal', fora: 'Fêmea fora do ninho', abandono: 'Sinal de abandono', ovofora: 'Ovo fora do ninho', problema: 'Outro problema' };
 const CHOCO = { chocando: 'Chocando', concluido: 'Concluído', abandonado: 'Abandonado' };
+const ESPECIES_PADRAO = [
+  { id: 'esp-canario', nome: 'Canário', diasEclosao: 13, diaAnilhamento: 5, maturidadeDias: 150, diametroAnilha: '', obs: '' },
+  { id: 'esp-periquito', nome: 'Periquito-australiano', diasEclosao: 18, diaAnilhamento: 6, maturidadeDias: 120, diametroAnilha: '', obs: '' },
+  { id: 'esp-calopsita', nome: 'Calopsita', diasEclosao: 19, diaAnilhamento: 7, maturidadeDias: 180, diametroAnilha: '', obs: '' },
+  { id: 'esp-agapornis', nome: 'Agapornis', diasEclosao: 23, diaAnilhamento: 8, maturidadeDias: 180, diametroAnilha: '', obs: '' },
+  { id: 'esp-mandarim', nome: 'Diamante-mandarim', diasEclosao: 13, diaAnilhamento: 7, maturidadeDias: 90, diametroAnilha: '', obs: '' },
+  { id: 'esp-gould', nome: 'Diamante-de-gould', diasEclosao: 15, diaAnilhamento: 8, maturidadeDias: 120, diametroAnilha: '', obs: '' }
+];
+const TIPO_EVENTO = { exposicao: 'Exposição (julgamento de plumagem)', canto: 'Concurso de canto', outro: 'Outro' };
+const CHECKLIST_PADRAO = ['Separar as aves candidatas', 'Fazer a inscrição e pagar a taxa', 'Adaptar as aves à gaiola de exposição', 'Banho nas aves (3 a 5 dias antes)', 'Conferir anilhas e documentos', 'Preparar transporte, comida e água'];
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 /* ============================================================
@@ -246,7 +259,20 @@ function toast(msg) {
    ============================================================ */
 function blank() {
   return { aves: [], casais: [], posturas: [], ovos: [], chocos: [], chocoEventos: [], manejos: [], lembretes: [],
-           cfg: { diasEclosao: 13, inicioTemporada: 7, ultimoBackup: '' } };
+           especies: [], clubes: [], lotesAnilhas: [], eventos: [], inscricoes: [],
+           cfg: { diasEclosao: 13, inicioTemporada: 7, ultimoBackup: '', especiePadrao: '' } };
+}
+/* Completa dados antigos: cria as espécies padrão e liga cada ave a uma espécie. Retorna true se mudou algo. */
+function migrate(d) {
+  let ch = false;
+  ['especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'].forEach(k => { if (!Array.isArray(d[k])) { d[k] = []; ch = true; } });
+  if (!d.especies.length) {
+    d.especies = ESPECIES_PADRAO.map(e => ({ ...e, diasEclosao: e.id === 'esp-canario' && +d.cfg.diasEclosao ? +d.cfg.diasEclosao : e.diasEclosao }));
+    ch = true;
+  }
+  if (!d.especies.some(e => e.id === d.cfg.especiePadrao)) { d.cfg.especiePadrao = d.especies[0].id; ch = true; }
+  d.aves.forEach(a => { if (!d.especies.some(e => e.id === a.especieId)) { a.especieId = d.cfg.especiePadrao; ch = true; } });
+  return ch;
 }
 let storageOk = true;
 function load() {
@@ -257,6 +283,7 @@ function load() {
   return blank();
 }
 let db = load();
+migrate(db);
 function saveLocal() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); storageOk = true; }
   catch (e) { storageOk = false; }
@@ -270,7 +297,7 @@ function save() {
 /* Sincronização na nuvem: quando a página é aberta como Artifact no claude.ai,
    os dados vão para o banco do artifact (iguais em todos os aparelhos).
    Cada tabela é gravada em blocos de até CHUNK linhas; o documento "meta" lista os blocos. */
-const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes'];
+const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'];
 const CHUNK = 300;
 let cloud = null, syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
 const myTag = uid(), lastSent = {};
@@ -318,7 +345,8 @@ async function pullCloud(meta) {
     const t = k.slice(0, k.lastIndexOf('-')), d = docs[i].data();
     if (d && Array.isArray(nd[t])) { nd[t].push(...JSON.parse(JSON.stringify(d.rows || []))); lastSent[k] = JSON.stringify(d); }
   });
-  db = nd; saveLocal(); render();
+  db = nd; const mig = migrate(db); saveLocal(); render();
+  if (mig) scheduleSync();
   if (stack.length && !stack[stack.length - 1].form) paint(true);
 }
 async function initCloud() {
@@ -379,15 +407,55 @@ function temporadas() {
   db.aves.forEach(a => a.origem === 'nascido' && a.dataNascimento && s.add(temporada(a.dataNascimento)));
   return [...s].sort().reverse();
 }
+/* Espécies, clubes e lotes de anilhas */
+const especie = id => db.especies.find(e => e.id === id);
+const espAve = a => (a && especie(a.especieId)) || especie(db.cfg.especiePadrao) || db.especies[0] || ESPECIES_PADRAO[0];
+const espPostura = p => { const c = casal(p.casalId); return espAve(ave(c?.femea) || ave(c?.macho)); };
+const multiEsp = () => new Set(db.aves.map(a => a.especieId)).size > 1;
+const clube = id => db.clubes.find(c => c.id === id);
+const evento = id => db.eventos.find(e => e.id === id);
+const optEspecies = () => db.especies.map(e => [e.id, e.nome]);
+function loteAnilha(l, n) {
+  const pf = l.prefixo ? (/[\s\-\/.]$/.test(l.prefixo) ? l.prefixo : l.prefixo + ' ') : '';
+  return pf + String(n).padStart(+l.digitos || 0, '0');
+}
+function loteDaAnilha(an) {
+  const r = norm(an);
+  return db.lotesAnilhas.find(l => {
+    const pf = norm(l.prefixo);
+    if (!r.startsWith(pf)) return false;
+    const rest = r.slice(pf.length);
+    return /^\d+$/.test(rest) && +rest >= +l.inicio && +rest <= +l.fim;
+  });
+}
+function loteUso(l) {
+  const set = new Set(db.aves.map(a => norm(a.anilha)));
+  let usadas = 0, prox = '';
+  for (let n = +l.inicio; n <= +l.fim; n++) { if (set.has(norm(loteAnilha(l, n)))) usadas++; else if (!prox) prox = loteAnilha(l, n); }
+  const total = Math.max(0, +l.fim - +l.inicio + 1);
+  return { total, usadas, livres: total - usadas, prox };
+}
+/* Próximas anilhas livres dos lotes da espécie, do ano informado */
+function proximasAnilhas(especieId, k, ano) {
+  const set = new Set(db.aves.map(a => norm(a.anilha))), out = [];
+  db.lotesAnilhas.filter(l => (!l.especieId || l.especieId === especieId) && (!l.ano || +l.ano === +ano))
+    .forEach(l => { for (let n = +l.inicio; n <= +l.fim && out.length < k; n++) { const an = loteAnilha(l, n); if (!set.has(norm(an))) { out.push(an); set.add(norm(an)); } } });
+  return out;
+}
+const clubeDaAve = a => clube(a.clubeId) || clube(loteDaAnilha(a.anilha)?.clubeId);
+const inscricoesDe = an => db.inscricoes.filter(i => (i.anilhas || []).some(x => norm(x) === norm(an)));
+const temPontos = i => i.pontos !== '' && i.pontos != null;
+const medalha = c => ({ 1: '🥇', 2: '🥈', 3: '🥉' }[+c] || (+c ? '🏅' : '📝'));
+const numBR = n => Number(n).toLocaleString('pt-BR');
 function ultimoOvo(p) {
   const ov = ovosDe(p.id);
   return ov.length ? ov.map(o => o.data).sort().pop() : p.dataInicio;
 }
-/* Eclosão prevista: N dias (padrão 13) após o último ovo; se o choco começou depois do último ovo, conta a partir do choco */
+/* Eclosão prevista: dias de incubação da espécie após o último ovo; se o choco começou depois do último ovo, conta a partir do choco */
 function previsao(p) {
   const ch = chocoDe(p.id), ult = ultimoOvo(p);
   const base = ch && ch.dataInicio > ult ? ch.dataInicio : ult;
-  return addDays(base, +db.cfg.diasEclosao || 13);
+  return addDays(base, +espPostura(p).diasEclosao || 13);
 }
 function filCasal(a) {
   if (a.posturaId) { const p = postura(a.posturaId); if (p) return p.casalId; }
@@ -407,21 +475,22 @@ function uniq(k) {
   if (k === 'local') db.casais.forEach(c => c.viveiro && s.add(c.viveiro));
   return [...s].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
-/* Troca de anilha em cascata (pais, casais, manejos, chocos) */
+/* Troca de anilha em cascata (pais, casais, manejos, chocos, inscrições) */
 function renameRefs(de, para) {
   const n = norm(de);
   db.aves.forEach(a => { if (norm(a.pai) === n) a.pai = para; if (norm(a.mae) === n) a.mae = para; });
   db.casais.forEach(c => { if (norm(c.macho) === n) c.macho = para; if (norm(c.femea) === n) c.femea = para; });
   db.manejos.forEach(m => { if (norm(m.anilha) === n) m.anilha = para; });
   db.chocos.forEach(c => { if (norm(c.femea) === n) c.femea = para; });
+  db.inscricoes.forEach(i => { i.anilhas = (i.anilhas || []).map(x => norm(x) === n ? para : x); });
 }
 
 /* ============================================================
    Indicadores
    ============================================================ */
-function stats({ temp = '', casalId = '', linhagem = '' } = {}) {
+function stats({ temp = '', casalId = '', linhagem = '', especieId = '' } = {}) {
   const okC = cid => (!casalId || cid === casalId) && (!linhagem || linCasal(casal(cid)) === linhagem);
-  const P = db.posturas.filter(p => (!temp || temporada(p.dataInicio) === temp) && okC(p.casalId));
+  const P = db.posturas.filter(p => (!temp || temporada(p.dataInicio) === temp) && okC(p.casalId) && (!especieId || espPostura(p).id === especieId));
   const ids = new Set(P.map(p => p.id));
   const O = db.ovos.filter(o => ids.has(o.posturaId));
   const n = s => O.filter(o => o.status === s).length;
@@ -429,6 +498,7 @@ function stats({ temp = '', casalId = '', linhagem = '' } = {}) {
   const Fil = db.aves.filter(a => {
     if (a.origem !== 'nascido') return false;
     if (temp && temporada(a.dataNascimento) !== temp) return false;
+    if (especieId && espAve(a).id !== especieId) return false;
     if (casalId || linhagem) { const cid = filCasal(a); return cid && okC(cid); }
     return true;
   });
@@ -442,16 +512,17 @@ function stats({ temp = '', casalId = '', linhagem = '' } = {}) {
     nat: nCasais ? (Fil.length / nCasais).toFixed(1).replace('.', ',') : '—'
   };
 }
-function resumo(inP) {
+function resumo(inP, esp = '') {
   const r = { ovos: 0, nasc: 0, mortes: 0, vendas: 0, receita: 0, compras: 0, gasto: 0, manejos: 0 };
-  db.ovos.forEach(o => inP(o.data) && r.ovos++);
+  db.ovos.forEach(o => { if (!inP(o.data)) return; const p = postura(o.posturaId); if (!esp || (p && espPostura(p).id === esp)) r.ovos++; });
   db.aves.forEach(a => {
+    if (esp && espAve(a).id !== esp) return;
     if (a.origem === 'nascido' && inP(a.dataNascimento)) r.nasc++;
     if (a.situacao === 'morto' && inP(a.dataSaida)) r.mortes++;
     if (a.situacao === 'vendido' && inP(a.dataSaida)) { r.vendas++; r.receita += +a.valorVenda || 0; }
     if (a.origem === 'comprado' && inP(a.dataAquisicao)) { r.compras++; r.gasto += +a.valorPago || 0; }
   });
-  db.manejos.forEach(m => inP(m.data) && r.manejos++);
+  db.manejos.forEach(m => { if (inP(m.data) && (!esp || (ave(m.anilha) && espAve(ave(m.anilha)).id === esp))) r.manejos++; });
   return r;
 }
 function mesesDaTemp(t) {
@@ -484,7 +555,8 @@ function alertas() {
     const sa = filhotesDe(p.id).filter(a => isSA(a.anilha) && ativa(a));
     if (sa.length) {
       const i = diff(sa[0].dataNascimento, t);
-      if (i >= 5) L.push({ n: i > 9 ? 4 : 3, c: i > 9 ? 'bad' : 'warn', ic: '💍', tx: `Anilhar ${sa.length} filhote(s) — ${i} dias de vida`, sub: nome, act: 'anilharPost', id: p.id });
+      const da = +espPostura(p).diaAnilhamento || 5;
+      if (i >= da) L.push({ n: i > da + 4 ? 4 : 3, c: i > da + 4 ? 'bad' : 'warn', ic: '💍', tx: `Anilhar ${sa.length} filhote(s) — ${i} dias de vida`, sub: nome, act: 'anilharPost', id: p.id });
     }
   });
   db.lembretes.filter(l => l.ativo).forEach(l => {
@@ -492,8 +564,28 @@ function alertas() {
     if (d <= 2) L.push({ n: d < 0 ? 4 : d === 0 ? 3 : 1, c: d < 0 ? 'bad' : d === 0 ? 'warn' : 'info', ic: MANEJO_IC[l.tipo] || '🔔', tx: l.titulo,
       sub: d < 0 ? `Vencido há ${-d} dia(s)` : d === 0 ? 'Hoje' : `Em ${d} dia(s) · ${fmt(l.proxima)}`, act: 'lemb', id: l.id });
   });
-  const ind = db.aves.filter(a => a.sexo === 'I' && ativa(a) && a.dataNascimento && diff(a.dataNascimento, t) >= 150);
-  if (ind.length) L.push({ n: 0, c: 'info', ic: '⚥', tx: `${ind.length} ave(s) com 5+ meses e sexo indeterminado`, sub: 'Toque para ver a lista', act: 'goSexoI' });
+  const ind = db.aves.filter(a => a.sexo === 'I' && ativa(a) && a.dataNascimento && diff(a.dataNascimento, t) >= (+espAve(a).maturidadeDias || 150));
+  if (ind.length) L.push({ n: 0, c: 'info', ic: '⚥', tx: `${ind.length} ave(s) já na idade de sexagem com sexo indeterminado`, sub: 'Toque para ver a lista', act: 'goSexoI' });
+  db.eventos.forEach(e => {
+    if (e.prazoInscricao) {
+      const d = diff(t, e.prazoInscricao), n = db.inscricoes.filter(i => i.eventoId === e.id).length;
+      if (d >= 0 && d <= 7) L.push({ n: d <= 2 ? 3 : 2, c: d <= 2 ? 'warn' : 'info', ic: '📝', tx: d === 0 ? `Inscrições encerram HOJE — ${e.nome}` : `Inscrições encerram em ${d} dia(s) — ${e.nome}`, sub: `${n} ave(s) inscrita(s) até agora`, act: 'evento', id: e.id });
+    }
+    if (e.dataInicio) {
+      const d = diff(t, e.dataInicio), pend = (e.checklist || []).filter(c => !c.ok).length;
+      if (d >= 0 && d <= 3) L.push({ n: 2, c: 'warn', ic: '🏆', tx: d === 0 ? `Campeonato hoje — ${e.nome}` : `Campeonato em ${d} dia(s) — ${e.nome}`, sub: pend ? `${pend} item(ns) de preparação pendente(s)` : 'Preparação concluída', act: 'evento', id: e.id });
+    }
+  });
+  db.clubes.forEach(c => {
+    if (!c.anuidadeValidade) return;
+    const d = diff(t, c.anuidadeValidade);
+    if (d <= 30) L.push({ n: d < 0 ? 3 : 1, c: d < 0 ? 'bad' : 'info', ic: '🏛️', tx: d < 0 ? `Anuidade vencida — ${c.sigla || c.nome}` : `Anuidade vence em ${d} dia(s) — ${c.sigla || c.nome}`, sub: 'Validade ' + fmt(c.anuidadeValidade), act: 'clubes' });
+  });
+  db.lotesAnilhas.forEach(l => {
+    if (l.ano && +l.ano < +t.slice(0, 4)) return;
+    const u = loteUso(l);
+    if (u.total && u.livres <= 5) L.push({ n: 1, c: u.livres ? 'info' : 'warn', ic: '💍', tx: u.livres ? `Restam ${u.livres} anilha(s) no lote ${loteAnilha(l, l.inicio)}…` : `Lote ${loteAnilha(l, l.inicio)}… esgotado`, sub: clube(l.clubeId)?.nome || '', act: 'clubes' });
+  });
   if (db.aves.length) {
     const b = db.cfg.ultimoBackup, d = b ? diff(b, t) : null;
     if (d === null || d > 30) L.push({ n: 0, c: 'info', ic: '💾', tx: 'Faça um backup dos dados', sub: b ? `Último backup há ${d} dias` : 'Nenhum backup feito ainda', act: 'backup' });
@@ -505,14 +597,15 @@ function alertas() {
    Navegação e estado de filtros
    ============================================================ */
 let view = 'home', curList = null;
-const sub = { repro: 'posturas', manejo: 'hist' };
+const sub = { repro: 'posturas', manejo: 'hist', torneios: 'eventos' };
 const F = {
-  aves: { q: '', sit: 'ativos', sexo: '', cor: '', temp: '', casal: '' },
+  aves: { q: '', sit: 'ativos', sexo: '', cor: '', temp: '', casal: '', esp: '' },
   post: { temp: '', casal: '', st: 'ativa' },
   fil: { temp: '', casal: '', st: '' },
   casais: { st: 'ativos' },
   man: { q: '', tipo: '' },
-  rel: { temp: '' },
+  rel: { temp: '', esp: '' },
+  ev: { st: 'proximos' },
   home: { q: '' }
 };
 
@@ -534,7 +627,7 @@ function bdgSit(s) { return `<span class="bdg ${SIT_BDG[s] || ''}">${esc(cap(s))
 function aveLi(a, extra = '') {
   return `<div class="li" data-act="ave" data-id="${a.id}">
     <div class="sx sx-${a.sexo}" aria-label="${SEXO[a.sexo]}">${SEXO_IC[a.sexo]}</div>
-    <div class="grow"><b>${esc(a.anilha)}</b><div class="mu">${esc([a.cor, a.mutacao, a.linhagem].filter(Boolean).join(' · ') || '—')}${extra}</div></div>
+    <div class="grow"><b>${esc(a.anilha)}</b><div class="mu">${esc([multiEsp() ? espAve(a).nome : '', a.cor, a.mutacao, a.linhagem].filter(Boolean).join(' · ') || '—')}${extra}</div></div>
     <div class="r">${bdgSit(a.situacao)}<div class="mu">${esc(a.local || '')}</div></div></div>`;
 }
 
@@ -573,7 +666,7 @@ VIEWS.home = () => {
     ${L.length ? L.map(a => `<div class="alert a-${a.c}" data-act="${a.act}" data-id="${a.id || ''}"><div class="ic">${a.ic}</div><div class="grow"><b>${esc(a.tx)}</b><div class="mu">${esc(a.sub)}</div></div></div>`).join('') : '<div class="card mu">✅ Nenhum alerta para hoje.</div>'}
     ${chocos.length ? `<h2>Chocos em andamento</h2>${chocos.map(c => {
       const p = postura(c.posturaId); const d = diff(c.dataInicio, t) + 1;
-      return `<div class="li" data-act="choco" data-id="${c.posturaId}"><div class="sx sx-F">♀</div><div class="grow"><b>${esc(c.femea)}</b><div class="mu">Dia ${d} · eclosão prevista ${p ? fmt(previsao(p)) : '—'}</div></div><span class="bdg b-ac">🪺 ${d}/${db.cfg.diasEclosao}</span></div>`;
+      return `<div class="li" data-act="choco" data-id="${c.posturaId}"><div class="sx sx-F">♀</div><div class="grow"><b>${esc(c.femea)}</b><div class="mu">Dia ${d} · eclosão prevista ${p ? fmt(previsao(p)) : '—'}</div></div><span class="bdg b-ac">🪺 ${d}/${p ? espPostura(p).diasEclosao : '—'}</span></div>`;
     }).join('')}` : ''}
     <h2>Plantel</h2>
     <div class="kpis">
@@ -584,6 +677,7 @@ VIEWS.home = () => {
       <div class="kpi"><b>${db.casais.filter(casalAtivo).length}</b><span>casais ativos</span></div>
       <div class="kpi"><b>${db.posturas.filter(p => p.status === 'ativa').length}</b><span>posturas ativas</span></div>
     </div>
+    ${multiEsp() ? `<div class="mu" style="margin-bottom:8px">${db.especies.map(e => [e, at.filter(a => a.especieId === e.id).length]).filter(x => x[1]).map(([e, n]) => `${esc(e.nome)}: <b>${n}</b>`).join(' · ')}</div>` : ''}
     <h2>Temporada ${tp}</h2>
     <div class="kpis">
       <div class="kpi"><b>${st.ovos}</b><span>ovos</span></div>
@@ -605,6 +699,7 @@ VIEWS.aves = () => {
   return `
     <input class="search" type="search" placeholder="🔍 Buscar pela anilha…" data-f="aves.q" value="${esc(f.q)}" id="avesQ" autocomplete="off">
     <div class="filters">
+      ${multiEsp() ? sel('aves.esp', [['', 'Todas as espécies'], ...optEspecies()], f.esp, 'Espécie') : ''}
       ${sel('aves.sit', [['ativos', 'Ativas'], ['', 'Todas as situações'], ...SIT.map(s => [s, cap(s)])], f.sit, 'Situação')}
       ${sel('aves.sexo', [['', 'Sexo'], ['M', 'Machos'], ['F', 'Fêmeas'], ['I', 'Indeterminados']], f.sexo, 'Sexo')}
       ${sel('aves.cor', [['', 'Todas as cores'], ...uniq('cor').map(c => [c, c])], f.cor, 'Cor')}
@@ -619,7 +714,7 @@ function avesList() {
   const r = db.aves.filter(a =>
     (!q || norm(a.anilha).includes(q) || norm(a.anilhaOriginal).includes(q)) &&
     (f.sit === '' || (f.sit === 'ativos' ? ativa(a) : a.situacao === f.sit)) &&
-    (!f.sexo || a.sexo === f.sexo) && (!f.cor || a.cor === f.cor) &&
+    (!f.sexo || a.sexo === f.sexo) && (!f.cor || a.cor === f.cor) && (!f.esp || a.especieId === f.esp) &&
     (!f.temp || (a.origem === 'nascido' && temporada(a.dataNascimento) === f.temp)) &&
     (!f.casal || filCasal(a) === f.casal)
   ).sort((a, b) => a.anilha.localeCompare(b.anilha, 'pt-BR', { numeric: true }));
@@ -678,7 +773,7 @@ function postCard(p, inSheet) {
   const ativaP = p.status === 'ativa';
   return `<div class="card">
     <div class="row"><b class="grow">${esc(casalNome(c))}</b>${postBadge(p)}</div>
-    <div class="mu">${esc(c?.viveiro || '')} · início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div>
+    <div class="mu">${multiEsp() ? esc(espPostura(p).nome) + ' · ' : ''}${esc(c?.viveiro || '')} · início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div>
     <div class="eggs">${ov.map(o => `<button class="egg e-${o.status}" data-act="ovo" data-id="${o.id}" aria-label="Ovo ${o.ordem}: ${OVO[o.status]}">${o.status === 'eclodido' ? '🐣' : o.ordem}</button>`).join('')}
       ${ativaP ? `<button class="egg add" data-act="addOvo" data-id="${p.id}" aria-label="Registrar ovo hoje">＋</button>` : ''}</div>
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
@@ -759,20 +854,20 @@ function lembList() {
 const alvoTxt = l => l.alvoTipo === 'todas' ? 'Todas as aves ativas' : l.alvoTipo === 'local' ? 'Local: ' + l.alvo : l.alvoTipo === 'ave' ? 'Ave ' + l.alvo : 'Geral';
 
 VIEWS.rel = () => {
-  const t = F.rel.temp;
-  const s = stats({ temp: t });
-  const casaisT = db.casais.filter(c => db.posturas.some(p => p.casalId === c.id && (!t || temporada(p.dataInicio) === t)));
+  const t = F.rel.temp, E = F.rel.esp;
+  const s = stats({ temp: t, especieId: E });
+  const casaisT = db.casais.filter(c => db.posturas.some(p => p.casalId === c.id && (!t || temporada(p.dataInicio) === t) && (!E || espPostura(p).id === E)));
   const linhs = [...new Set(casaisT.map(linCasal))];
   const row = (nome, s) => `<tr><td>${esc(nome)}</td><td>${s.posturas}</td><td>${s.ovos}</td><td>${s.fert}</td><td>${s.ecl}</td><td>${s.fil}</td><td>${s.mortos}</td><td>${s.txFert}</td><td>${s.txEcl}</td><td>${s.txMort}</td></tr>`;
   const headC = '<tr><th>{x}</th><th>Post.</th><th>Ovos</th><th>Fért.</th><th>Ecl.</th><th>Filh.</th><th>Mortos</th><th>Fertil.</th><th>Eclosão</th><th>Mortal.</th></tr>';
   const tp = t || temporada(today());
-  const meses = mesesDaTemp(tp).map(k => [k, resumo(d => d && d.slice(0, 7) === k)]);
-  const tot = resumo(d => d && temporada(d) === tp);
+  const meses = mesesDaTemp(tp).map(k => [k, resumo(d => d && d.slice(0, 7) === k, E)]);
+  const tot = resumo(d => d && temporada(d) === tp, E);
   const rowR = (n, r) => `<tr><td>${n}</td><td>${r.ovos}</td><td>${r.nasc}</td><td>${r.mortes}</td><td>${r.vendas}</td><td>${brl(r.receita)}</td><td>${r.compras}</td><td>${brl(r.gasto)}</td><td>${r.manejos}</td></tr>`;
   const headR = '<tr><th>{x}</th><th>Ovos</th><th>Nasc.</th><th>Mortes</th><th>Vendas</th><th>Receita</th><th>Compras</th><th>Gasto</th><th>Manejos</th></tr>';
   return `
-    <div class="filters">${sel('rel.temp', optTemps('Todas as temporadas'), t, 'Temporada')}<button class="btn sm" data-act="xls">⬇️ Excel</button></div>
-    <h2>Indicadores ${t ? 'da temporada ' + t : 'gerais'}</h2>
+    <div class="filters">${sel('rel.temp', optTemps('Todas as temporadas'), t, 'Temporada')}${multiEsp() ? sel('rel.esp', [['', 'Todas as espécies'], ...optEspecies()], E, 'Espécie') : ''}<button class="btn sm" data-act="xls">⬇️ Excel</button></div>
+    <h2>Indicadores ${t ? 'da temporada ' + t : 'gerais'}${E ? ' · ' + esc(especie(E)?.nome || '') : ''}</h2>
     <div class="kpis">
       <div class="kpi"><b>${s.nCasais}</b><span>casais com postura</span></div>
       <div class="kpi"><b>${s.posturas}</b><span>posturas</span></div>
@@ -786,13 +881,13 @@ VIEWS.rel = () => {
     <div class="mu">Ovos: ${s.fert} férteis (${s.ecl} eclodidos) · ${s.inf} inférteis · ${s.queb} quebrados · ${s.perd} perdidos · ${s.pend} não verificados.<br>
       Filhotes: ${s.mantidos} mantidos · ${s.vendidos} vendidos · ${s.doados} doados · ${s.mortos} mortos.</div>
     <h2>Desempenho por casal</h2>
-    ${casaisT.length ? `<div class="tbl"><table><thead>${headC.replace('{x}', 'Casal')}</thead><tbody>${casaisT.map(c => row(casalNome(c), stats({ temp: t, casalId: c.id }))).join('')}</tbody></table></div>` : '<div class="card mu">Sem posturas no período.</div>'}
+    ${casaisT.length ? `<div class="tbl"><table><thead>${headC.replace('{x}', 'Casal')}</thead><tbody>${casaisT.map(c => row(casalNome(c), stats({ temp: t, casalId: c.id, especieId: E }))).join('')}</tbody></table></div>` : '<div class="card mu">Sem posturas no período.</div>'}
     <h2>Desempenho por linhagem</h2>
-    ${linhs.length ? `<div class="tbl"><table><thead>${headC.replace('{x}', 'Linhagem')}</thead><tbody>${linhs.map(l => row(l, stats({ temp: t, linhagem: l }))).join('')}</tbody></table></div>` : '<div class="card mu">Sem dados.</div>'}
+    ${linhs.length ? `<div class="tbl"><table><thead>${headC.replace('{x}', 'Linhagem')}</thead><tbody>${linhs.map(l => row(l, stats({ temp: t, linhagem: l, especieId: E }))).join('')}</tbody></table></div>` : '<div class="card mu">Sem dados.</div>'}
     <h2>Resumo mensal · temporada ${tp}</h2>
     <div class="tbl"><table><thead>${headR.replace('{x}', 'Mês')}</thead><tbody>${meses.map(([k, r]) => rowR(mesLabel(k), r)).join('')}</tbody><tfoot>${rowR('Total', tot)}</tfoot></table></div>
     <h2>Resumo anual (por temporada)</h2>
-    <div class="tbl"><table><thead>${headR.replace('{x}', 'Temporada')}</thead><tbody>${temporadas().map(x => rowR(x, resumo(d => d && temporada(d) === x))).join('')}</tbody></table></div>
+    <div class="tbl"><table><thead>${headR.replace('{x}', 'Temporada')}</thead><tbody>${temporadas().map(x => rowR(x, resumo(d => d && temporada(d) === x, E))).join('')}</tbody></table></div>
     <p class="mu">Fertilidade = ovos férteis (inclui eclodidos) ÷ total de ovos. Eclosão = eclodidos ÷ férteis. Natalidade = filhotes ÷ casais que fizeram postura. Mortalidade = filhotes mortos ÷ filhotes nascidos.</p>`;
 };
 
@@ -855,7 +950,9 @@ function applyShow(ent) {
 }
 function datalists() {
   return ['cor', 'mutacao', 'linhagem', 'local', 'vendedor'].map(k => `<datalist id="dl_${k}">${uniq(k).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('') +
-    `<datalist id="dl_anilha">${db.aves.filter(ativa).map(a => `<option value="${esc(a.anilha)}">`).join('')}</datalist>`;
+    `<datalist id="dl_anilha">${db.aves.filter(ativa).map(a => `<option value="${esc(a.anilha)}">`).join('')}</datalist>` +
+    ['classe', 'juiz', 'premio'].map(k => `<datalist id="dl_${k}">${[...new Set(db.inscricoes.map(i => i[k]).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('') +
+    `<datalist id="dl_federacao">${[...new Set(['FOB', ...db.clubes.map(c => c.federacao).filter(Boolean)])].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
 }
 function openForm(cfg) {
   const data = cfg.data || {};
@@ -889,12 +986,14 @@ function optAves(sexo, cur, soAtivas) {
 }
 
 function formAve(a, preset = {}) {
-  const d = a ? { ...a } : { origem: 'comprado', sexo: 'I', situacao: 'ativo', dataAquisicao: today(), ...preset };
+  const d = a ? { ...a } : { origem: 'comprado', sexo: 'I', situacao: 'ativo', dataAquisicao: today(), especieId: F.aves.esp || db.cfg.especiePadrao, ...preset };
   const comp = o => o.origem === 'comprado', nasc = o => o.origem === 'nascido', said = o => SIT_SAIDA.includes(o.situacao);
   openForm({
     title: a ? 'Editar ave ' + a.anilha : 'Nova ave', data: d,
     fields: [
       { k: 'anilha', l: 'Anilha (numeração)', req: 1, ph: 'Ex.: HG 26 001' },
+      { k: 'especieId', l: 'Espécie', t: 'select', o: optEspecies },
+      { k: 'clubeId', l: 'Clube da anilha', t: 'select', o: () => [['', '— pelo lote de anilhas / nenhum —'], ...db.clubes.map(c => [c.id, c.nome])], show: () => db.clubes.length > 0 },
       { k: 'origem', l: 'Origem', t: 'seg', o: [['comprado', 'Comprado'], ['nascido', 'Nascido no plantel']] },
       { k: 'vendedor', l: 'Vendedor / criadouro', list: 'vendedor', show: comp },
       { k: 'dataAquisicao', l: 'Data de aquisição', t: 'date', show: comp },
@@ -950,6 +1049,7 @@ function sAve(id) {
       const I = (l, v) => `<div><span>${l}</span>${v}</div>`;
       return `<div class="row"><div class="sx sx-${a.sexo}">${SEXO_IC[a.sexo]}</div><h2 class="grow" style="margin:0">${esc(a.anilha)}</h2>${bdgSit(a.situacao)}</div>
         <div class="card" style="margin-top:10px"><div class="grid2">
+          ${I('Espécie', esc(espAve(a).nome))}${I('Clube da anilha', esc(clubeDaAve(a)?.nome || '—'))}
           ${I('Sexo', SEXO[a.sexo])}${I('Local', esc(a.local || '—'))}
           ${I('Cor', esc(a.cor || '—'))}${I('Mutação', esc(a.mutacao || '—'))}
           ${I('Linhagem', esc(a.linhagem || '—'))}${I('Origem', a.origem === 'nascido' ? 'Nascido no plantel' : 'Comprado')}
@@ -965,6 +1065,7 @@ function sAve(id) {
           ${ativa(a) ? `<button class="btn" data-act="saida" data-id="${a.id}">↗️ Venda / saída</button><button class="btn bad" data-act="morte" data-id="${a.id}">† Morte</button>` : ''}
         </div>
         ${pesos.length ? `<h3>Pesagens</h3><div class="card">${pesos.slice(0, 8).map(m => `<div class="row"><span class="grow">${fmt(m.data)}</span><b>${m.peso.toLocaleString('pt-BR')} g</b></div>`).join('')}</div>` : ''}
+        ${inscricoesDe(a.anilha).length ? `<h3>Campeonatos</h3>${inscricoesDe(a.anilha).map(inscLi).join('')}` : ''}
         ${filhos.length ? `<h3>Filhos (${filhos.length})</h3>${filhos.map(x => aveLi(x, ` · nasc. ${fmt(x.dataNascimento)}`)).join('')}` : ''}
         ${cs.length ? `<h3>Casais</h3>${cs.map(c => `<div class="li" data-act="casal" data-id="${c.id}"><div class="grow"><b>${esc(casalNome(c))}</b><div class="mu">${fmt(c.dataFormacao)} → ${c.dataSeparacao ? fmt(c.dataSeparacao) : 'ativo'}</div></div></div>`).join('')}` : ''}
         <h3>Histórico de manejo</h3>
@@ -996,8 +1097,11 @@ function formMorte(id) {
 }
 function formAnilhar(ids) {
   const L = ids.map(aveById).filter(Boolean);
+  const sug = proximasAnilhas(espAve(L[0]).id, L.length, (L[0].dataNascimento || today()).slice(0, 4)), data = { data: today() };
+  L.forEach((a, i) => data['an_' + a.id] = sug[i] || '');
   openForm({
-    title: L.length > 1 ? `Anilhar ${L.length} filhotes` : 'Anilhar ' + L[0].anilha, data: { data: today() }, ok: 'Anilhar',
+    title: L.length > 1 ? `Anilhar ${L.length} filhotes` : 'Anilhar ' + L[0].anilha, data, ok: 'Anilhar',
+    intro: sug.length ? '<p class="mu" style="margin-bottom:10px">Preenchido com as próximas anilhas livres dos seus lotes. Confira antes de salvar.</p>' : '',
     fields: [{ k: 'data', l: 'Data do anilhamento', t: 'date', req: 1 },
       ...L.map(a => ({ k: 'an_' + a.id, l: `Anilha para ${a.anilha} (nasc. ${fmt(a.dataNascimento)})`, ph: 'Deixe vazio para pular' }))],
     save: o => {
@@ -1155,7 +1259,7 @@ function sChoco(pid) {
       return `<h2>🪺 Choco — ${esc(ch.femea)}</h2>
         <div class="card"><div class="grid2">
           <div><span>Início do choco</span>${fmt(ch.dataInicio)}</div><div><span>Status</span>${CHOCO[ch.status]}</div>
-          <div><span>Dia</span>${ch.status === 'chocando' ? d + ' de ' + db.cfg.diasEclosao : '—'}</div><div><span>Eclosão prevista</span><b>${fmt(previsao(p))}</b></div>
+          <div><span>Dia</span>${ch.status === 'chocando' ? d + ' de ' + espPostura(p).diasEclosao : '—'}</div><div><span>Eclosão prevista</span><b>${fmt(previsao(p))}</b></div>
         </div>${ch.obs ? `<p class="mu" style="margin-top:6px">📝 ${esc(ch.obs)}</p>` : ''}</div>
         <div class="acts">
           <button class="btn pri" data-act="chocoEv" data-id="${ch.id}">＋ Acompanhamento</button>
@@ -1209,7 +1313,8 @@ function criarFilhotes(p, n, data, anilhas, cor, semOvos) {
     const an = anilhas[i] || nextSA();
     db.aves.push({ id: uid(), anilha: an, origem: 'nascido', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '',
       dataNascimento: data, pai: c?.macho || '', mae: c?.femea || '', posturaId: p.id, sexo: 'I', cor: cor || '', mutacao: '',
-      linhagem: pai?.linhagem || mae?.linhagem || '', situacao: 'ativo', local: c?.viveiro || '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' });
+      linhagem: pai?.linhagem || mae?.linhagem || '', situacao: 'ativo', local: c?.viveiro || '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '',
+      especieId: (mae || pai)?.especieId || db.cfg.especiePadrao, clubeId: '' });
     if (anilhas[i]) db.manejos.push({ id: uid(), anilha: an, local: '', data: today(), tipo: 'anilhamento', peso: '', produto: '', dose: '', obs: 'Anilhado no registro do nascimento' });
   }
   const ch = chocoDe(p.id); if (ch && ch.status === 'chocando') ch.status = 'concluido';
@@ -1217,19 +1322,22 @@ function criarFilhotes(p, n, data, anilhas, cor, semOvos) {
 function formNasc(pid) {
   const p = postura(pid), ov = ovosDe(pid);
   const cand = ov.filter(o => o.status === 'fertil' || o.status === 'pendente').length;
+  const esp = espPostura(p), sug = proximasAnilhas(esp.id, 3, today().slice(0, 4));
   openForm({
     title: '🐣 Nascimento — ' + casalNome(casal(p.casalId)), data: { data: today(), qtd: Math.max(1, cand) }, ok: 'Registrar nascimento',
     intro: `<p class="mu" style="margin-bottom:10px">${cand} ovo(s) férteis/não verificados nesta postura. Eles serão marcados como eclodidos na ordem.</p>`,
     fields: [
       { k: 'data', l: 'Data do nascimento', t: 'date', req: 1 },
       { k: 'qtd', l: 'Quantos filhotes nasceram?', t: 'number', req: 1 },
-      { k: 'anilhas', l: 'Anilhas (uma por linha) — opcional', t: 'textarea', ph: 'Deixe vazio: o sistema cria “S/A-1”, “S/A-2”… e avisa a hora de anilhar (5º–8º dia)' },
+      { k: 'anilhas', l: 'Anilhas (uma por linha) — opcional', t: 'textarea', ph: `Deixe vazio: o sistema cria “S/A-1”, “S/A-2”… e avisa a hora de anilhar (a partir do ${esp.diaAnilhamento || 5}º dia)` },
+      ...(sug.length ? [{ k: 'usarLote', l: `Anilhar agora com as próximas anilhas livres (${sug.join(', ')}…)`, t: 'check' }] : []),
       { k: 'cor', l: 'Cor dos filhotes (opcional)', list: 'cor' }
     ],
     save: o => {
       const n = parseInt(o.qtd) || 0;
       if (n < 1 || n > 10) return 'Informe entre 1 e 10 filhotes';
-      const an = o.anilhas.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      let an = o.anilhas.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      if (!an.length && o.usarLote) an = proximasAnilhas(esp.id, n, o.data.slice(0, 4));
       if (an.length > n) return 'Há mais anilhas que filhotes';
       if (new Set(an.map(norm)).size !== an.length) return 'Há anilhas repetidas';
       const dup = an.find(x => ave(x)); if (dup) return 'A anilha ' + dup + ' já existe';
@@ -1338,10 +1446,268 @@ function lembFeito(id) {
 }
 
 /* ============================================================
+   Torneios: campeonatos, exposições e resultados
+   ============================================================ */
+VIEWS.torneios = () => {
+  const head = subtabs('torneios', [['eventos', '🏆 Eventos'], ['resultados', '📈 Resultados']]);
+  if (sub.torneios === 'resultados') return head + resultadosHTML();
+  curList = eventosList;
+  return head + `<div class="filters">${sel('ev.st', [['proximos', 'Próximos'], ['passados', 'Realizados'], ['', 'Todos']], F.ev.st, 'Período')}</div>
+    <div id="list"></div><button class="btn pri full" data-act="novoEvento">＋ Novo campeonato / exposição</button>`;
+};
+function eventoStatus(e) {
+  const t = today(), fim = e.dataFim || e.dataInicio;
+  if (!e.dataInicio) return ['', 'Sem data'];
+  if (fim < t) return ['', 'Realizado'];
+  if (e.dataInicio <= t) return ['b-warn', 'Acontecendo'];
+  if (e.prazoInscricao && e.prazoInscricao >= t) { const p = diff(t, e.prazoInscricao); return [p <= 2 ? 'b-warn' : 'b-info', p === 0 ? 'Inscrições até hoje' : `Inscrições: ${p}d`]; }
+  return ['b-info', `Em ${diff(t, e.dataInicio)} dia(s)`];
+}
+const periodo = e => fmt(e.dataInicio) + (e.dataFim && e.dataFim !== e.dataInicio ? ' a ' + fmt(e.dataFim) : '');
+function eventosList() {
+  const t = today(), st = F.ev.st;
+  const r = db.eventos.filter(e => { const fim = e.dataFim || e.dataInicio || ''; return !st || (st === 'proximos' ? !fim || fim >= t : fim && fim < t); })
+    .sort((a, b) => st === 'passados' ? (b.dataInicio || '').localeCompare(a.dataInicio || '') : (a.dataInicio || '9').localeCompare(b.dataInicio || '9'));
+  return r.length ? r.map(e => {
+    const [cls, tx] = eventoStatus(e), ins = db.inscricoes.filter(i => i.eventoId === e.id);
+    const pod = ins.filter(i => +i.colocacao >= 1 && +i.colocacao <= 3).length, org = clube(e.clubeId);
+    return `<div class="li" data-act="evento" data-id="${e.id}"><div class="sx sx-I">${e.tipo === 'canto' ? '🎵' : '🏆'}</div>
+      <div class="grow"><b>${esc(e.nome)}</b><div class="mu">${periodo(e)}${e.local ? ' · ' + esc(e.local) : ''}</div>
+      <div class="mu">${esc(org?.sigla || org?.nome || e.organizador || '')}${ins.length ? ` · ${ins.length} inscrição(ões)` : ''}${pod ? ` · ${pod} pódio(s)` : ''}</div></div>
+      <span class="bdg ${cls}">${tx}</span></div>`;
+  }).join('') : '<div class="empty">Nenhum evento aqui. Cadastre o próximo campeonato para receber os alertas de prazo de inscrição.</div>';
+}
+function inscLi(i) {
+  const e = evento(i.eventoId);
+  return `<div class="li" data-act="insc" data-id="${i.id}"><span style="font-size:22px">${medalha(i.colocacao)}</span>
+    <div class="grow"><b>${esc(e?.nome || '(evento removido)')}</b><div class="mu">${fmt(e?.dataInicio)} · ${esc([(i.anilhas || []).join(', '), i.classe].filter(Boolean).join(' · '))}</div></div>
+    <div class="r">${temPontos(i) ? `<b>${numBR(i.pontos)} pts</b>` : '<span class="bdg">Aguardando</span>'}<div class="mu">${i.colocacao ? i.colocacao + 'º lugar' : ''}</div></div></div>`;
+}
+function sEvento(id) {
+  return {
+    html: () => {
+      const e = evento(id); if (!e) return '<div class="empty">Evento não encontrado.</div>';
+      const ins = db.inscricoes.filter(i => i.eventoId === id).sort((a, b) => (+a.colocacao || 99) - (+b.colocacao || 99));
+      const ck = e.checklist || [], feitos = ck.filter(c => c.ok).length, org = clube(e.clubeId);
+      return `<h2>${e.tipo === 'canto' ? '🎵' : '🏆'} ${esc(e.nome)}</h2>
+        <div class="card"><div class="grid2">
+          <div><span>Tipo</span>${TIPO_EVENTO[e.tipo] || '—'}</div><div><span>Organizador</span>${esc(org?.nome || e.organizador || '—')}</div>
+          <div><span>Data</span>${periodo(e)}</div><div><span>Local</span>${esc(e.local || '—')}</div>
+          <div><span>Prazo de inscrição</span>${fmt(e.prazoInscricao)}</div><div><span>Taxa por ave</span>${e.taxa !== '' && e.taxa != null ? brl(e.taxa) : '—'}</div>
+        </div>${e.obs ? `<p class="mu" style="margin-top:8px">📝 ${esc(e.obs)}</p>` : ''}
+        ${ins.length && e.taxa ? `<p class="mu" style="margin-top:6px">Custo das inscrições: <b>${brl(ins.reduce((s, i) => s + (i.anilhas || []).length, 0) * e.taxa)}</b></p>` : ''}</div>
+        <div class="acts"><button class="btn pri" data-act="novaInsc" data-id="${id}">＋ Inscrever ave</button><button class="btn" data-act="editEvento" data-id="${id}">✏️ Editar</button></div>
+        <h3>Preparação (${feitos}/${ck.length})</h3>
+        <div class="card">${ck.map((c, i) => `<label class="chk ck"><input type="checkbox" data-act="ck" data-id="${id}|${i}" ${c.ok ? 'checked' : ''}> <span class="${c.ok ? 'done' : ''}">${esc(c.t)}</span></label>`).join('') || '<span class="mu">Sem itens.</span>'}
+          <div class="acts"><button class="btn sm" data-act="ckAdd" data-id="${id}">＋ Item</button></div></div>
+        <h3>Inscrições (${ins.length})</h3>${ins.map(inscLi).join('') || '<div class="card mu">Nenhuma ave inscrita ainda.</div>'}`;
+    }
+  };
+}
+function formEvento(e) {
+  openForm({
+    title: e ? 'Editar evento' : 'Novo campeonato / exposição', data: e ? { ...e } : { tipo: 'exposicao', clubeId: db.clubes[0]?.id || '' },
+    fields: [
+      { k: 'nome', l: 'Nome do evento', req: 1, ph: 'Ex.: Campeonato Estadual' },
+      { k: 'tipo', l: 'Tipo', t: 'seg', o: Object.entries(TIPO_EVENTO) },
+      { k: 'clubeId', l: 'Clube organizador', t: 'select', o: () => [['', 'Outro / não cadastrado'], ...db.clubes.map(c => [c.id, c.nome])] },
+      { k: 'organizador', l: 'Organizador', show: o => !o.clubeId },
+      { k: 'local', l: 'Local' },
+      { k: 'dataInicio', l: 'Data de início', t: 'date', req: 1 },
+      { k: 'dataFim', l: 'Data de término', t: 'date' },
+      { k: 'prazoInscricao', l: 'Prazo de inscrição', t: 'date' },
+      { k: 'taxa', l: 'Taxa de inscrição por ave (R$)', t: 'number' },
+      { k: 'obs', l: 'Observações', t: 'textarea' }
+    ],
+    save: o => {
+      if (o.dataFim && o.dataFim < o.dataInicio) return 'A data de término é antes do início';
+      if (e) Object.assign(e, o);
+      else db.eventos.push({ id: uid(), ...o, checklist: CHECKLIST_PADRAO.map(t => ({ t, ok: false })) });
+      toast('Evento salvo');
+    },
+    del: e ? () => ask(`Excluir “${e.nome}” e as ${db.inscricoes.filter(i => i.eventoId === e.id).length} inscrição(ões) dele?`, () => {
+      db.eventos = db.eventos.filter(x => x !== e); db.inscricoes = db.inscricoes.filter(i => i.eventoId !== e.id); delDone(1);
+    }, { ok: 'Excluir', danger: true }) : null
+  });
+}
+function formInsc(eventoId, ins) {
+  const e = evento(eventoId);
+  openForm({
+    title: ins ? 'Inscrição — ' + e.nome : 'Inscrever em ' + e.nome, data: ins ? { ...ins, anilhas: (ins.anilhas || []).join(', ') } : { modalidade: 'individual' },
+    intro: ins ? '' : '<p class="mu" style="margin-bottom:10px">Depois do julgamento, abra a inscrição de novo para lançar pontos e colocação.</p>',
+    fields: [
+      { k: 'modalidade', l: 'Modalidade', t: 'seg', o: [['individual', 'Individual'], ['equipe', 'Equipe']] },
+      { k: 'anilhas', l: 'Anilha(s)', list: 'anilha', req: 1, ph: 'Equipe: separe as anilhas por vírgula' },
+      { k: 'classe', l: 'Classe / categoria', list: 'classe', ph: 'Ex.: Lipocromo amarelo intenso' },
+      { k: 'juiz', l: 'Juiz', list: 'juiz' },
+      { k: 'pontos', l: 'Pontuação total', t: 'number' },
+      { k: 'colocacao', l: 'Colocação (1 = 1º lugar)', t: 'number' },
+      { k: 'premio', l: 'Prêmio', list: 'premio', ph: 'Ex.: Medalha de ouro' },
+      { k: 'obs', l: 'Notas da ficha de julgamento', t: 'textarea', ph: 'Ex.: cor 28 · plumagem 19 · porte 9' }
+    ],
+    save: o => {
+      const L = o.anilhas.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean);
+      const miss = L.find(x => !ave(x)); if (miss) return 'Anilha não cadastrada: ' + miss;
+      if (o.modalidade === 'individual' && L.length > 1) return 'Na modalidade individual informe só uma anilha';
+      const rec = { ...o, anilhas: L.map(x => ave(x).anilha), colocacao: o.colocacao === '' ? '' : (parseInt(o.colocacao) || '') };
+      if (ins) Object.assign(ins, rec); else db.inscricoes.push({ id: uid(), eventoId, ...rec });
+      toast(temPontos(rec) ? 'Resultado salvo' : 'Inscrição salva');
+    },
+    del: ins ? () => ask('Excluir esta inscrição?', () => { db.inscricoes = db.inscricoes.filter(x => x !== ins); delDone(); }, { ok: 'Excluir', danger: true }) : null
+  });
+}
+function resultadosHTML() {
+  if (!db.inscricoes.length) return '<div class="empty">Nenhuma inscrição ainda. Cadastre um evento em “Eventos” e inscreva suas aves.</div>';
+  const J = db.inscricoes.filter(i => temPontos(i) || i.colocacao);
+  const pts = J.filter(i => temPontos(i) && i.modalidade !== 'equipe').map(i => +i.pontos), avg = L => L.length ? L.reduce((a, b) => a + b, 0) / L.length : 0;
+  const pod = J.filter(i => +i.colocacao >= 1 && +i.colocacao <= 3).length, ouro = J.filter(i => +i.colocacao === 1).length;
+  const grp = keyFn => {
+    const m = {};
+    J.filter(i => i.modalidade !== 'equipe').forEach(i => (i.anilhas || []).forEach(an => {
+      const a = ave(an), k = a && keyFn(a); if (!k) return;
+      const g = m[k] = m[k] || { n: 0, pts: [], pod: 0, best: 0 };
+      g.n++; if (temPontos(i)) { g.pts.push(+i.pontos); g.best = Math.max(g.best, +i.pontos); }
+      if (+i.colocacao >= 1 && +i.colocacao <= 3) g.pod++;
+    }));
+    return Object.entries(m).sort((a, b) => b[1].pod - a[1].pod || avg(b[1].pts) - avg(a[1].pts));
+  };
+  const tbl = (titulo, col, rows) => rows.length ? `<h3>${titulo}</h3><div class="tbl"><table><thead><tr><th>${col}</th><th>Particip.</th><th>Pódios</th><th>Média</th><th>Melhor</th></tr></thead><tbody>
+    ${rows.map(([k, g]) => `<tr><td>${esc(k)}</td><td>${g.n}</td><td>${g.pod}</td><td>${g.pts.length ? avg(g.pts).toFixed(1).replace('.', ',') : '—'}</td><td>${g.best || '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const hist = [...db.inscricoes].sort((a, b) => (evento(b.eventoId)?.dataInicio || '').localeCompare(evento(a.eventoId)?.dataInicio || ''));
+  return `<div class="kpis">
+      <div class="kpi"><b>${db.inscricoes.length}</b><span>inscrições</span></div>
+      <div class="kpi"><b>${pod}</b><span>pódios (1º a 3º)</span></div>
+      <div class="kpi"><b>${ouro}</b><span>1º lugares</span></div>
+      <div class="kpi"><b>${pts.length ? avg(pts).toFixed(1).replace('.', ',') : '—'}</b><span>média de pontos (individual)</span></div>
+    </div>
+    ${tbl('Ranking por linhagem', 'Linhagem', grp(a => a.linhagem))}
+    ${tbl('Ranking por casal (pais)', 'Casal', grp(a => a.origem === 'nascido' && a.pai && a.mae ? `${a.pai} × ${a.mae}` : ''))}
+    <h3>Histórico</h3>${hist.map(inscLi).join('')}
+    <p class="mu">Os rankings consideram inscrições individuais já julgadas.</p>`;
+}
+
+/* ============================================================
+   Cadastros: clubes, lotes de anilhas e espécies
+   ============================================================ */
+function sClubes() {
+  return {
+    html: () => `<h2>🏛️ Clubes e anilhas</h2>
+      <p class="mu" style="margin-bottom:10px">Cadastre cada clube em que você é sócio e os lotes de anilhas recebidos. Ao anilhar filhotes, o app sugere a próxima anilha livre.</p>
+      ${db.clubes.map(c => {
+        const lotes = db.lotesAnilhas.filter(l => l.clubeId === c.id).sort((a, b) => (+b.ano || 0) - (+a.ano || 0));
+        const d = c.anuidadeValidade ? diff(today(), c.anuidadeValidade) : null;
+        const b = d === null ? '' : d < 0 ? '<span class="bdg b-bad">Anuidade vencida</span>' : d <= 30 ? `<span class="bdg b-warn">Vence em ${d}d</span>` : '<span class="bdg b-ok">Em dia</span>';
+        return `<div class="card"><div class="row" data-act="editClube" data-id="${c.id}" style="cursor:pointer">
+          <div class="grow"><b>${esc(c.nome)}</b>${c.sigla ? ` <span class="mu">(${esc(c.sigla)})</span>` : ''}
+          <div class="mu">${c.federacao ? esc(c.federacao) + ' · ' : ''}Nº de criador: ${esc(c.numeroCriador || '—')}${c.anuidadeValidade ? ' · anuidade até ' + fmt(c.anuidadeValidade) : ''}</div></div>${b}</div>
+          ${lotes.map(l => {
+            const u = loteUso(l);
+            return `<div class="li" data-act="editLote" data-id="${l.id}" style="margin-top:8px"><div class="sx sx-I">💍</div>
+              <div class="grow"><b>${esc(loteAnilha(l, l.inicio))} → ${esc(loteAnilha(l, l.fim))}</b>
+              <div class="mu">${l.ano || 'Sem ano'} · ${esc(especie(l.especieId)?.nome || 'Qualquer espécie')}${l.diametro ? ' · ' + esc(l.diametro) : ''}</div>
+              <div class="mu">${u.usadas} de ${u.total} usadas${u.prox ? ' · próxima: <b>' + esc(u.prox) + '</b>' : ''}</div></div>
+              <span class="bdg ${u.livres === 0 ? 'b-bad' : u.livres <= 5 ? 'b-warn' : 'b-ok'}">${u.livres} livres</span></div>`;
+          }).join('')}
+          <div class="acts"><button class="btn sm" data-act="novoLote" data-id="${c.id}">＋ Lote de anilhas</button></div></div>`;
+      }).join('') || '<div class="card mu">Nenhum clube cadastrado.</div>'}
+      <button class="btn pri full" data-act="novoClube">＋ Novo clube</button>`
+  };
+}
+function formClube(c) {
+  openForm({
+    title: c ? 'Editar clube' : 'Novo clube', data: c ? { ...c } : {},
+    fields: [
+      { k: 'nome', l: 'Nome do clube', req: 1 },
+      { k: 'sigla', l: 'Sigla' },
+      { k: 'federacao', l: 'Federação', list: 'federacao', ph: 'Ex.: FOB' },
+      { k: 'numeroCriador', l: 'Seu nº de criador no clube' },
+      { k: 'anuidadeValidade', l: 'Anuidade válida até', t: 'date' },
+      { k: 'contato', l: 'Contato (telefone, e-mail ou site)' },
+      { k: 'obs', l: 'Observações', t: 'textarea' }
+    ],
+    save: o => { if (c) Object.assign(c, o); else db.clubes.push({ id: uid(), ...o }); toast('Clube salvo'); },
+    del: c ? () => {
+      const n = db.lotesAnilhas.filter(l => l.clubeId === c.id).length;
+      if (n) { ask(`Este clube tem ${n} lote(s) de anilhas. Exclua os lotes antes de excluir o clube.`, null, { only: true }); return; }
+      ask('Excluir este clube?', () => { db.clubes = db.clubes.filter(x => x !== c); db.eventos.forEach(e => { if (e.clubeId === c.id) { e.organizador = c.nome; e.clubeId = ''; } }); delDone(); }, { ok: 'Excluir', danger: true });
+    } : null
+  });
+}
+function formLote(l, clubeId) {
+  const d = l ? { ...l } : { clubeId: clubeId || db.clubes[0]?.id || '', ano: +today().slice(0, 4), especieId: db.cfg.especiePadrao, inicio: 1, fim: 50, digitos: 3 };
+  openForm({
+    title: l ? 'Editar lote de anilhas' : 'Novo lote de anilhas', data: d,
+    intro: '<p class="mu" style="margin-bottom:10px">A anilha é montada como prefixo + número com zeros à esquerda. Ex.: prefixo “HG 26” e 3 dígitos → HG 26 001, HG 26 002…</p>',
+    fields: [
+      { k: 'clubeId', l: 'Clube', t: 'select', req: 1, o: () => db.clubes.map(c => [c.id, c.nome]) },
+      { k: 'especieId', l: 'Espécie', t: 'select', o: () => [['', 'Qualquer espécie'], ...optEspecies()] },
+      { k: 'ano', l: 'Ano', t: 'number', req: 1 },
+      { k: 'prefixo', l: 'Prefixo', ph: 'Ex.: HG 26' },
+      { k: 'inicio', l: 'Primeiro número', t: 'number', req: 1 },
+      { k: 'fim', l: 'Último número', t: 'number', req: 1 },
+      { k: 'digitos', l: 'Dígitos do número', t: 'number', ph: '3 → 001' },
+      { k: 'diametro', l: 'Diâmetro', ph: 'Ex.: 2,9 mm' },
+      { k: 'obs', l: 'Observações', t: 'textarea' }
+    ],
+    save: o => {
+      o.inicio = parseInt(o.inicio); o.fim = parseInt(o.fim); o.digitos = parseInt(o.digitos) || 0; o.ano = parseInt(o.ano) || '';
+      if (!(o.inicio >= 0) || !(o.fim >= o.inicio)) return 'O último número precisa ser maior ou igual ao primeiro';
+      if (o.fim - o.inicio > 5000) return 'Lote grande demais (máximo 5.000 anilhas)';
+      if (l) Object.assign(l, o); else db.lotesAnilhas.push({ id: uid(), ...o });
+      toast(`Lote salvo: ${loteAnilha(o, o.inicio)} a ${loteAnilha(o, o.fim)}`);
+    },
+    del: l ? () => ask('Excluir este lote? As aves já anilhadas não são alteradas.', () => { db.lotesAnilhas = db.lotesAnilhas.filter(x => x !== l); delDone(); }, { ok: 'Excluir', danger: true }) : null
+  });
+}
+function sEspecies() {
+  return {
+    html: () => `<h2>🐦 Espécies</h2>
+      <p class="mu" style="margin-bottom:10px">Os dias de incubação definem a eclosão prevista; o dia de anilhamento e a idade de sexagem definem os alertas. Ajuste aos padrões do seu criatório.</p>
+      ${db.especies.map(e => {
+        const n = db.aves.filter(a => ativa(a) && a.especieId === e.id).length;
+        return `<div class="li" data-act="editEsp" data-id="${e.id}"><div class="sx sx-I">🐦</div><div class="grow"><b>${esc(e.nome)}</b>${e.id === db.cfg.especiePadrao ? ' <span class="bdg b-ac">Padrão</span>' : ''}
+          <div class="mu">Incubação ${e.diasEclosao} dias · anilhar a partir do ${e.diaAnilhamento || '—'}º dia · sexagem com ${e.maturidadeDias || '—'} dias${e.diametroAnilha ? ' · anilha ' + esc(e.diametroAnilha) : ''}</div></div>
+          <div class="r"><b>${n}</b><div class="mu">ativas</div></div></div>`;
+      }).join('')}
+      <button class="btn pri full" data-act="novaEsp">＋ Nova espécie</button>
+      <p class="mu" style="margin-top:10px">Espécies nativas (curió, coleiro, trinca-ferro…) exigem cadastro do criador no SISPASS/IBAMA.</p>`
+  };
+}
+function formEsp(e) {
+  openForm({
+    title: e ? 'Editar espécie' : 'Nova espécie', data: e ? { ...e, padrao: e.id === db.cfg.especiePadrao } : { diasEclosao: 14, diaAnilhamento: 6, maturidadeDias: 150 },
+    fields: [
+      { k: 'nome', l: 'Nome', req: 1, ph: 'Ex.: Pintassilgo' },
+      { k: 'diasEclosao', l: 'Dias de incubação (último ovo → eclosão)', t: 'number', req: 1 },
+      { k: 'diaAnilhamento', l: 'Anilhar a partir do dia', t: 'number' },
+      { k: 'maturidadeDias', l: 'Idade para definir o sexo (dias)', t: 'number' },
+      { k: 'diametroAnilha', l: 'Diâmetro da anilha', ph: 'Ex.: 2,9 mm' },
+      { k: 'padrao', l: 'Espécie padrão para novos cadastros', t: 'check' },
+      { k: 'obs', l: 'Observações', t: 'textarea' }
+    ],
+    save: o => {
+      const d = parseInt(o.diasEclosao); if (!(d >= 8 && d <= 40)) return 'Dias de incubação: use entre 8 e 40';
+      const nome = o.nome.trim(), dup = db.especies.find(x => x !== e && norm(x.nome) === norm(nome)); if (dup) return 'Já existe a espécie ' + dup.nome;
+      const rec = { nome, diasEclosao: d, diaAnilhamento: parseInt(o.diaAnilhamento) || '', maturidadeDias: parseInt(o.maturidadeDias) || '', diametroAnilha: o.diametroAnilha, obs: o.obs };
+      let id = e?.id;
+      if (e) Object.assign(e, rec); else { id = uid(); db.especies.push({ id, ...rec }); }
+      if (o.padrao) db.cfg.especiePadrao = id;
+      toast('Espécie salva');
+    },
+    del: e ? () => {
+      const n = db.aves.filter(a => a.especieId === e.id).length;
+      if (n) { ask(`Há ${n} ave(s) desta espécie. Mude a espécie delas antes de excluir.`, null, { only: true }); return; }
+      if (db.especies.length === 1) { ask('É preciso manter pelo menos uma espécie.', null, { only: true }); return; }
+      ask(`Excluir a espécie ${e.nome}?`, () => { db.especies = db.especies.filter(x => x !== e); migrate(db); delDone(); }, { ok: 'Excluir', danger: true });
+    } : null
+  });
+}
+
+/* ============================================================
    Dados: exportação, backup, configurações e ajuda
    ============================================================ */
 const EXP = {
-  aves: { n: 'Aves', rows: () => db.aves, cols: [['Anilha', 'anilha'], ['Origem', a => a.origem === 'nascido' ? 'Nascido' : 'Comprado'], ['Sexo', a => SEXO[a.sexo]], ['Cor', 'cor'], ['Mutação', 'mutacao'], ['Linhagem', 'linhagem'], ['Situação', 'situacao'], ['Local', 'local'],
+  aves: { n: 'Aves', rows: () => db.aves, cols: [['Anilha', 'anilha'], ['Espécie', a => espAve(a).nome], ['Clube', a => clubeDaAve(a)?.nome || ''], ['Origem', a => a.origem === 'nascido' ? 'Nascido' : 'Comprado'], ['Sexo', a => SEXO[a.sexo]], ['Cor', 'cor'], ['Mutação', 'mutacao'], ['Linhagem', 'linhagem'], ['Situação', 'situacao'], ['Local', 'local'],
     ['Vendedor', 'vendedor'], ['Data aquisição', a => fmt(a.dataAquisicao)], ['Valor pago', 'valorPago'], ['Anilha original', 'anilhaOriginal'], ['Nascimento', a => a.dataNascimento ? fmt(a.dataNascimento) : ''], ['Pai', 'pai'], ['Mãe', 'mae'],
     ['Data saída', a => a.dataSaida ? fmt(a.dataSaida) : ''], ['Motivo/destino', 'motivoSaida'], ['Valor venda', 'valorVenda'], ['Observações', 'obs']] },
   casais: { n: 'Casais', rows: () => db.casais, cols: [['Macho', 'macho'], ['Fêmea', 'femea'], ['Viveiro', 'viveiro'], ['Formação', c => fmt(c.dataFormacao)], ['Separação', c => c.dataSeparacao ? fmt(c.dataSeparacao) : ''], ['Linhagem', linCasal], ['Posturas', c => stats({ casalId: c.id }).posturas], ['Filhotes', c => stats({ casalId: c.id }).fil], ['Observações', 'obs']] },
@@ -1351,6 +1717,11 @@ const EXP = {
   chocoEventos: { n: 'Acompanhamento choco', rows: () => db.chocoEventos, cols: [['Fêmea', e => db.chocos.find(c => c.id === e.chocoId)?.femea || ''], ['Data', e => fmt(e.data)], ['Alimentação extra', e => e.alimentacaoExtra ? 'Sim' : 'Não'], ['Comportamento', e => SINAIS[e.sinal] || e.sinal], ['Observação', 'obs']] },
   filhotes: { n: 'Filhotes', rows: () => db.aves.filter(a => a.origem === 'nascido'), cols: [['Anilha', 'anilha'], ['Nascimento', a => fmt(a.dataNascimento)], ['Temporada', a => temporada(a.dataNascimento)], ['Pai', 'pai'], ['Mãe', 'mae'], ['Casal', a => filCasal(a) ? casalNome(casal(filCasal(a))) : ''], ['Sexo', a => SEXO[a.sexo]], ['Status', a => cap(statusFilhote(a))], ['Data saída/morte', a => a.dataSaida ? fmt(a.dataSaida) : ''], ['Motivo', 'motivoSaida']] },
   manejos: { n: 'Manejo', rows: () => db.manejos, cols: [['Data', m => fmt(m.data)], ['Anilha', 'anilha'], ['Local', 'local'], ['Tipo', m => MANEJO[m.tipo]], ['Peso (g)', 'peso'], ['Produto', 'produto'], ['Dose', 'dose'], ['Observações', 'obs']] },
+  especies: { n: 'Espécies', rows: () => db.especies, cols: [['Espécie', 'nome'], ['Incubação (dias)', 'diasEclosao'], ['Anilhamento (dia)', 'diaAnilhamento'], ['Sexagem (dias)', 'maturidadeDias'], ['Diâmetro da anilha', 'diametroAnilha'], ['Aves ativas', e => db.aves.filter(a => ativa(a) && a.especieId === e.id).length], ['Observações', 'obs']] },
+  clubes: { n: 'Clubes', rows: () => db.clubes, cols: [['Clube', 'nome'], ['Sigla', 'sigla'], ['Federação', 'federacao'], ['Nº de criador', 'numeroCriador'], ['Anuidade até', c => c.anuidadeValidade ? fmt(c.anuidadeValidade) : ''], ['Contato', 'contato'], ['Observações', 'obs']] },
+  lotesAnilhas: { n: 'Lotes de anilhas', rows: () => db.lotesAnilhas, cols: [['Clube', l => clube(l.clubeId)?.nome || ''], ['Ano', 'ano'], ['Espécie', l => especie(l.especieId)?.nome || 'Qualquer'], ['Primeira', l => loteAnilha(l, l.inicio)], ['Última', l => loteAnilha(l, l.fim)], ['Diâmetro', 'diametro'], ['Usadas', l => loteUso(l).usadas], ['Livres', l => loteUso(l).livres], ['Próxima livre', l => loteUso(l).prox]] },
+  eventos: { n: 'Campeonatos', rows: () => db.eventos, cols: [['Evento', 'nome'], ['Tipo', e => TIPO_EVENTO[e.tipo] || ''], ['Organizador', e => clube(e.clubeId)?.nome || e.organizador || ''], ['Local', 'local'], ['Início', e => fmt(e.dataInicio)], ['Fim', e => e.dataFim ? fmt(e.dataFim) : ''], ['Prazo de inscrição', e => e.prazoInscricao ? fmt(e.prazoInscricao) : ''], ['Taxa por ave', 'taxa'], ['Inscrições', e => db.inscricoes.filter(i => i.eventoId === e.id).length]] },
+  inscricoes: { n: 'Inscrições', rows: () => db.inscricoes, cols: [['Evento', i => evento(i.eventoId)?.nome || ''], ['Data', i => fmt(evento(i.eventoId)?.dataInicio)], ['Modalidade', i => i.modalidade === 'equipe' ? 'Equipe' : 'Individual'], ['Anilha(s)', i => (i.anilhas || []).join(', ')], ['Classe', 'classe'], ['Juiz', 'juiz'], ['Pontos', 'pontos'], ['Colocação', 'colocacao'], ['Prêmio', 'premio'], ['Observações', 'obs']] },
   lembretes: { n: 'Lembretes', rows: () => db.lembretes, cols: [['Título', 'titulo'], ['Tipo', l => MANEJO[l.tipo]], ['A cada (dias)', 'intervaloDias'], ['Próxima', l => fmt(l.proxima)], ['Aplica-se a', alvoTxt], ['Ativo', l => l.ativo ? 'Sim' : 'Não']] }
 };
 const cell = (c, r) => { const v = typeof c[1] === 'function' ? c[1](r) : r[c[1]]; return v ?? ''; };
@@ -1416,7 +1787,7 @@ $('#fileIn').addEventListener('change', e => {
       const d = JSON.parse(r.result);
       if (!Array.isArray(d.aves)) throw new Error('formato');
       ask(`Restaurar backup com ${d.aves.length} aves? Os dados atuais serão substituídos.`, () => {
-        const b = blank(); db = { ...b, ...d, cfg: { ...b.cfg, ...(d.cfg || {}) } };
+        const b = blank(); db = { ...b, ...d, cfg: { ...b.cfg, ...(d.cfg || {}) } }; migrate(db);
         save(); stack.length = 0; paint(); render(); toast('Backup restaurado');
       }, { ok: 'Restaurar', danger: true });
     } catch (err) { ask('Arquivo inválido: não é um backup do Canaril.', null, { only: true }); }
@@ -1427,6 +1798,8 @@ $('#fileIn').addEventListener('change', e => {
 function sDados() {
   return {
     html: () => `<h2>Dados e configurações</h2>
+      <div class="card"><h3 style="margin-top:0">Cadastros</h3>
+        <div class="acts"><button class="btn" data-act="clubes">🏛️ Clubes e anilhas (${db.clubes.length})</button><button class="btn" data-act="especies">🐦 Espécies (${db.especies.length})</button></div></div>
       <div class="card"><h3 style="margin-top:0">Exportar</h3>
         <button class="btn pri full" data-act="xls">⬇️ Excel .xlsx (todas as tabelas + indicadores)</button>
         <p class="mu" style="margin:10px 0 6px">CSV por tabela (abre no Excel / Google Planilhas):</p>
@@ -1435,7 +1808,7 @@ function sDados() {
         <p class="mu" style="margin-bottom:8px">${cloud ? 'Os dados estão salvos na nuvem do claude.ai e aparecem iguais em todos os aparelhos. O backup é uma cópia extra de segurança.' : 'Os dados ficam só neste navegador. Faça backup com frequência e use-o para passar os dados a outro aparelho.'}${db.cfg.ultimoBackup ? ' Último: ' + fmt(db.cfg.ultimoBackup) + '.' : ''}</p>
         <div class="acts"><button class="btn pri" data-act="backup">💾 Salvar backup</button><button class="btn" data-act="restore">📂 Restaurar backup</button></div></div>
       <div class="card"><h3 style="margin-top:0">Configurações</h3>
-        <p class="mu">Dias até a eclosão: <b>${db.cfg.diasEclosao}</b> · Temporada começa em: <b>${cap(MESES[(db.cfg.inicioTemporada || 1) - 1])}</b></p>
+        <p class="mu">Temporada começa em: <b>${cap(MESES[(db.cfg.inicioTemporada || 1) - 1])}</b> · Espécie padrão: <b>${esc(espAve(null).nome)}</b>. Os dias de incubação ficam em cada espécie.</p>
         <div class="acts"><button class="btn" data-act="cfg">⚙️ Alterar</button></div></div>
       <div class="card"><h3 style="margin-top:0">Ajuda e testes</h3>
         <div class="acts"><button class="btn" data-act="ajuda">📖 Guia rápido</button><button class="btn" data-act="seed">🧪 Carregar dados de exemplo</button><button class="btn bad" data-act="wipe">Apagar tudo</button></div></div>
@@ -1446,12 +1819,10 @@ function formCfg() {
   openForm({
     title: 'Configurações', data: { ...db.cfg },
     fields: [
-      { k: 'diasEclosao', l: 'Dias entre o último ovo e a eclosão', t: 'number', req: 1 },
       { k: 'inicioTemporada', l: 'Mês de início da temporada de reprodução', t: 'select', o: MESES.map((m, i) => [i + 1, cap(m) + (i === 0 ? ' (temporada = ano civil)' : '')]) }
     ],
     save: o => {
-      const d = parseInt(o.diasEclosao); if (!(d >= 10 && d <= 20)) return 'Use entre 10 e 20 dias';
-      db.cfg.diasEclosao = d; db.cfg.inicioTemporada = parseInt(o.inicioTemporada) || 1;
+      db.cfg.inicioTemporada = parseInt(o.inicioTemporada) || 1;
       Object.keys(F).forEach(g => { if ('temp' in F[g]) F[g].temp = ''; });
     }
   });
@@ -1467,14 +1838,22 @@ function sAjuda() {
       <h3>Registrar uma postura</h3><ol>
         <li>Tenha o casal cadastrado (Reprodução → Casais → ＋ Novo casal).</li>
         <li>No primeiro ovo: <b>🥚 Ovo</b> no Início → toque no casal em “iniciar postura”. Ou ＋ Nova postura.</li>
-        <li>A cada novo ovo: <b>🥚 Ovo</b> → toque no casal (1 toque por ovo). A data prevista de eclosão (último ovo + ${db.cfg.diasEclosao} dias) é calculada sozinha.</li>
+        <li>A cada novo ovo: <b>🥚 Ovo</b> → toque no casal (1 toque por ovo). A data prevista de eclosão (último ovo + dias de incubação da espécie; canário: 13) é calculada sozinha.</li>
         <li>Quando a fêmea começar a chocar: <b>🪺 Choco</b> na postura. Registre alimentação extra e comportamento em “＋ Acompanhamento”.</li>
         <li>No 6º–7º dia: <b>🔦 Ovoscopia</b> para marcar férteis e claros.</li></ol>
       <h3>Registrar um nascimento</h3><ol>
         <li>Toque em <b>🐣 Nascimento</b> no Início → escolha o casal.</li>
         <li>Informe quantos nasceram. Os ovos viram “eclodido” e os filhotes são criados com pai, mãe, linhagem e local do casal.</li>
-        <li>Sem anilha ainda? Deixe em branco: eles recebem “S/A-1”, “S/A-2”… e o Início avisa no 5º dia para <b>💍 Anilhar</b>.</li>
+        <li>Sem anilha ainda? Deixe em branco: eles recebem “S/A-1”, “S/A-2”… e o Início avisa no dia certo da espécie para <b>💍 Anilhar</b>. Com lotes cadastrados, o app já sugere as próximas anilhas livres.</li>
         <li>Morte de filhote: abra a ave → <b>† Morte</b>, informe data e motivo.</li></ol>
+      <h3>Espécies, clubes e anilhas</h3><ol>
+        <li>☰ → <b>🐦 Espécies</b>: confira os dias de incubação, o dia de anilhamento e a idade de sexagem de cada espécie que você cria.</li>
+        <li>☰ → <b>🏛️ Clubes e anilhas</b>: cadastre cada clube (nº de criador e validade da anuidade) e os lotes de anilhas recebidos (prefixo, faixa de números e ano).</li>
+        <li>O app avisa quando a anuidade está para vencer e quando um lote está acabando.</li></ol>
+      <h3>Campeonatos</h3><ol>
+        <li>Aba <b>🏆 Torneios</b> → ＋ Novo campeonato: datas, local e prazo de inscrição. Ele já vem com um checklist de preparação.</li>
+        <li>Abra o evento → <b>＋ Inscrever ave</b> (individual ou equipe, separando as anilhas por vírgula).</li>
+        <li>Depois do julgamento, toque na inscrição e lance pontos, colocação e prêmio. Os resultados aparecem na ficha da ave e no ranking de linhagens e casais.</li></ol>
       <h3>Dicas</h3><ul>
         <li>Toque num ovo colorido para mudar o status dele.</li>
         <li>Os alertas do Início mostram eclosões próximas/atrasadas, ovoscopias, anilhamentos e lembretes.</li>
@@ -1493,8 +1872,8 @@ function seed() {
 function seedNow() {
   const T = today(), D = n => addDays(T, n);
   const cfg = { ...db.cfg, ultimoBackup: T };
-  db = blank(); db.cfg = cfg;
-  const base = { origem: 'comprado', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '', dataNascimento: '', pai: '', mae: '', posturaId: '', sexo: 'I', cor: '', mutacao: '', linhagem: '', situacao: 'ativo', local: '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' };
+  db = blank(); db.cfg = cfg; migrate(db);
+  const base = { especieId: 'esp-canario', clubeId: '', origem: 'comprado', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '', dataNascimento: '', pai: '', mae: '', posturaId: '', sexo: 'I', cor: '', mutacao: '', linhagem: '', situacao: 'ativo', local: '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' };
   const A = o => { const a = { id: uid(), ...base, ...o }; db.aves.push(a); return a; };
   [
     ['CD 23 017', 'M', 'Amarelo', 'Lipocromo intenso', 'Linha Ouro', 'Criadouro Canto Dourado', 820, 380, 'Gaiola 01'],
@@ -1518,6 +1897,10 @@ function seedNow() {
         c3 = C('NV 24 008', 'NV 24 015', 'Gaiola 04', -450), c4 = C('AG 24 120', 'AG 24 133', 'Gaiola 05', -450, -250),
         c5 = C('CD 24 061', 'RB 25 044', 'Gaiola 06', -85), c6 = C('RB 24 203', 'RB 24 230', 'Gaiola 03', -85);
   c6.obs = 'Macho RB 24 203 alterna entre as gaiolas 02 e 03';
+  // Periquitos (segunda espécie)
+  A({ anilha: 'PQ 24 010', especieId: 'esp-periquito', sexo: 'M', cor: 'Verde-claro', mutacao: 'Normal', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 120, anilhaOriginal: 'PQ 24 010', situacao: 'reprodutor', local: 'Gaiola 08' });
+  A({ anilha: 'PQ 24 022', especieId: 'esp-periquito', sexo: 'F', cor: 'Azul-cobalto', mutacao: 'Opalino', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 140, anilhaOriginal: 'PQ 24 022', situacao: 'reprodutor', local: 'Gaiola 08' });
+  const c7 = C('PQ 24 010', 'PQ 24 022', 'Gaiola 08', -60);
 
   let n25 = 0, n26 = 0;
   const h25 = () => 'HG 25 ' + pad(++n25).padStart(3, '0'), h26 = () => 'HG 26 ' + pad(++n26).padStart(3, '0');
@@ -1525,12 +1908,12 @@ function seedNow() {
     const p = { id: uid(), casalId: c.id, dataInicio: D(start), status: o.status || (o.hatch && start < -100 ? 'encerrada' : 'ativa'), obs: o.obs || '' };
     if (start < -100) p.status = 'encerrada';
     db.posturas.push(p);
-    st.forEach((s, i) => db.ovos.push({ id: uid(), posturaId: p.id, ordem: i + 1, data: D(start + i), status: s, obs: s === 'infertil' ? 'Ovo claro na ovoscopia' : s === 'quebrado' ? 'Casca fina' : s === 'perdido' ? 'Caiu do ninho' : '' }));
+    st.forEach((s, i) => db.ovos.push({ id: uid(), posturaId: p.id, ordem: i + 1, data: D(start + i * (o.gap || 1)), status: s, obs: s === 'infertil' ? 'Ovo claro na ovoscopia' : s === 'quebrado' ? 'Casca fina' : s === 'perdido' ? 'Caiu do ninho' : '' }));
     if (o.choco != null) db.chocos.push({ id: uid(), posturaId: p.id, femea: c.femea, dataInicio: D(o.choco), status: o.chocoSt || (p.status === 'ativa' && !o.hatch ? 'chocando' : 'concluido'), obs: '' });
     const pai = ave(c.macho);
     (o.hatch?.f || []).forEach(f => {
       const loc = f.local || (start < -100 ? (f.sexo === 'F' ? 'Viveiro de voo 2' : 'Viveiro de voo 1') : start < -30 ? 'Viveiro de voo 3' : c.viveiro);
-      A({ origem: 'nascido', dataNascimento: D(o.hatch.d), pai: c.macho, mae: c.femea, posturaId: p.id, cor: pai.cor, mutacao: pai.mutacao, linhagem: pai.linhagem, local: loc, ...f });
+      A({ origem: 'nascido', especieId: pai.especieId, dataNascimento: D(o.hatch.d), pai: c.macho, mae: c.femea, posturaId: p.id, cor: pai.cor, mutacao: pai.mutacao, linhagem: pai.linhagem, local: loc, ...f });
       if (!isSA(f.anilha)) db.manejos.push({ id: uid(), anilha: f.anilha, local: '', data: D(o.hatch.d + 6), tipo: 'anilhamento', peso: '', produto: '', dose: '', obs: '' });
     });
     return p;
@@ -1553,6 +1936,7 @@ function seedNow() {
   const p2 = P(c2, -16, ['fertil', 'fertil', 'fertil', 'infertil'], { choco: -15 });
   const p5 = P(c5, -12, ['pendente', 'pendente', 'pendente', 'pendente'], { choco: -11 });
   P(c1, -3, ['pendente', 'pendente', 'pendente']);
+  P(c7, -20, ['fertil', 'fertil', 'fertil', 'fertil', 'infertil'], { choco: -19, gap: 2 });
   const ev = (p, d, al, s, o) => db.chocoEventos.push({ id: uid(), chocoId: chocoDe(p.id).id, data: D(d), alimentacaoExtra: al, sinal: s, obs: o });
   ev(p3, -10, true, 'normal', 'Farinhada com ovo'); ev(p3, -1, false, 'fora', 'Fêmea saindo muito do ninho');
   ev(p2, -5, true, 'normal', 'Farinhada com ovo e couve'); ev(p5, -2, true, 'normal', '');
@@ -1576,6 +1960,29 @@ function seedNow() {
   L('Pesagem dos reprodutores', 'pesagem', 30, 2, 'geral');
   L('Troca dos ninhos', 'limpeza', 30, 10, 'geral');
 
+  // Clubes, lotes de anilhas e campeonatos
+  const ano = +T.slice(0, 4);
+  const cl1 = { id: uid(), nome: 'Clube Ornitológico Exemplo', sigla: 'COE', federacao: 'FOB', numeroCriador: 'HG-0457', anuidadeValidade: D(20), contato: '', obs: 'Dados de exemplo' };
+  const cl2 = { id: uid(), nome: 'Associação de Criadores Exemplo', sigla: 'ACE', federacao: '', numeroCriador: '1182', anuidadeValidade: D(200), contato: '', obs: 'Dados de exemplo' };
+  db.clubes.push(cl1, cl2);
+  db.lotesAnilhas.push(
+    { id: uid(), clubeId: cl1.id, ano: ano - 1, especieId: 'esp-canario', prefixo: 'HG 25', inicio: 1, fim: 20, digitos: 3, diametro: '2,9 mm', obs: '' },
+    { id: uid(), clubeId: cl1.id, ano, especieId: 'esp-canario', prefixo: 'HG 26', inicio: 1, fim: 30, digitos: 3, diametro: '2,9 mm', obs: '' },
+    { id: uid(), clubeId: cl2.id, ano, especieId: 'esp-periquito', prefixo: 'ACE 26', inicio: 1, fim: 8, digitos: 2, diametro: '4,0 mm', obs: '' });
+  const E = (o) => { const e = { id: uid(), tipo: 'exposicao', organizador: '', local: '', dataFim: '', prazoInscricao: '', taxa: '', obs: '', checklist: CHECKLIST_PADRAO.map(t => ({ t, ok: false })), ...o }; db.eventos.push(e); return e; };
+  const I = (e, anilhas, o = {}) => db.inscricoes.push({ id: uid(), eventoId: e.id, modalidade: anilhas.length > 1 ? 'equipe' : 'individual', anilhas, classe: '', juiz: '', pontos: '', colocacao: '', premio: '', obs: '', ...o });
+  const ev1 = E({ nome: 'Exposição Regional de Canários', clubeId: cl1.id, local: 'Ginásio Municipal', dataInicio: D(-330), dataFim: D(-328), prazoInscricao: D(-345), taxa: 15 });
+  ev1.checklist.forEach(c => c.ok = true);
+  I(ev1, ['HG 25 003'], { classe: 'Lipocromo amarelo intenso', juiz: 'Carlos M.', pontos: 91, colocacao: 1, premio: 'Medalha de ouro', obs: 'Cor 28 · plumagem 19 · porte 9 · condição 9' });
+  I(ev1, ['HG 25 007'], { classe: 'Vermelho mosaico', juiz: 'Carlos M.', pontos: 89, colocacao: 2, premio: 'Medalha de prata' });
+  I(ev1, ['HG 25 013'], { classe: 'Branco dominante', juiz: 'Ana P.', pontos: 86, colocacao: 5 });
+  I(ev1, ['HG 25 006', 'HG 25 007', 'HG 25 011', 'HG 25 012'], { classe: 'Equipe vermelho mosaico', juiz: 'Carlos M.', pontos: 352, colocacao: 2, premio: 'Troféu de equipe' });
+  const ev2 = E({ nome: 'Campeonato Estadual de Canaricultura', clubeId: cl1.id, local: 'Centro de Eventos', dataInicio: D(19), dataFim: D(21), prazoInscricao: D(5), taxa: 20 });
+  ev2.checklist[0].ok = true;
+  I(ev2, ['HG 25 003'], { classe: 'Lipocromo amarelo intenso' });
+  I(ev2, ['HG 25 016'], { classe: 'Ágata canela' });
+  E({ nome: 'Mostra de Periquitos', clubeId: cl2.id, local: 'Sede da associação', dataInicio: D(60), prazoInscricao: D(45), taxa: 10 });
+
   save(); stack.length = 0; paint(); view = 'home'; render();
   toast('Dados de exemplo carregados');
 }
@@ -1597,6 +2004,13 @@ const ACT = {
   qPeso: () => formManejo({ alvo: 'ave', tipo: 'pesagem' }),
   morte: id => formMorte(id), saida: id => formSaida(id), anilhar: id => formAnilhar([id]),
   anilharPost: id => { const L = filhotesDe(id).filter(a => isSA(a.anilha) && ativa(a)); L.length ? formAnilhar(L.map(a => a.id)) : toast('Nenhum filhote sem anilha'); },
+  clubes: () => showSheet(sClubes()), novoClube: () => formClube(), editClube: id => formClube(clube(id)),
+  novoLote: id => formLote(null, id), editLote: id => formLote(db.lotesAnilhas.find(l => l.id === id)),
+  especies: () => showSheet(sEspecies()), novaEsp: () => formEsp(), editEsp: id => formEsp(especie(id)),
+  novoEvento: () => formEvento(), evento: id => showSheet(sEvento(id)), editEvento: id => formEvento(evento(id)),
+  novaInsc: id => formInsc(id), insc: id => { const i = db.inscricoes.find(x => x.id === id); formInsc(i.eventoId, i); },
+  ck: id => { const [eid, i] = id.split('|'), e = evento(eid); e.checklist[+i].ok = !e.checklist[+i].ok; refresh(); },
+  ckAdd: id => openForm({ title: 'Novo item de preparação', fields: [{ k: 't', l: 'Item', req: 1, ph: 'Ex.: Levar ficha de inscrição impressa' }], save: o => { const e = evento(id); (e.checklist = e.checklist || []).push({ t: o.t, ok: false }); } }),
   novoCasal: () => formCasal(), casal: id => showSheet(sCasal(id)), editCasal: id => formCasal(casal(id)),
   separar: id => ask('Separar este casal hoje?', () => { casal(id).dataSeparacao = today(); refresh(); toast('Casal separado'); }, { ok: 'Separar' }),
   reunir: id => { casal(id).dataSeparacao = ''; refresh(); toast('Casal reativado'); },
@@ -1631,7 +2045,7 @@ const ACT = {
   goSexoI: () => { Object.assign(F.aves, { q: '', sit: 'ativos', sexo: 'I', cor: '', temp: '', casal: '' }); view = 'aves'; render(); },
   csv: k => exportCSV(k), xls: () => exportXLS(), backup: () => backup(), restore: () => $('#fileIn').click(),
   seed: () => seed(), cfg: () => formCfg(), ajuda: () => showSheet(sAjuda()),
-  wipe: () => ask('Apagar TODOS os dados? Faça um backup antes — esta ação não pode ser desfeita.', () => { const c = db.cfg; db = blank(); db.cfg = c; save(); stack.length = 0; paint(); view = 'home'; render(); }, { ok: 'Apagar tudo', danger: true }),
+  wipe: () => ask('Apagar TODOS os dados? Faça um backup antes — esta ação não pode ser desfeita.', () => { const c = db.cfg; db = blank(); db.cfg = c; migrate(db); save(); stack.length = 0; paint(); view = 'home'; render(); }, { ok: 'Apagar tudo', danger: true }),
 };
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');

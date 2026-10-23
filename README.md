@@ -1,6 +1,6 @@
 # Canaril — Sistema de gestão de canários
 
-Aplicativo de página única (`canarios/index.html`) para controlar uma criação de canários: cadastro de aves, casais, posturas, ovos, choco, nascimentos, saúde/manejo e relatórios. Em português do Brasil, pensado para o celular.
+Aplicativo de página única (`canarios/index.html`) para controlar um criatório de canários e outras espécies: cadastro de aves, casais, posturas, ovos, choco, nascimentos, saúde/manejo, clubes e anilhas, campeonatos e relatórios. Em português do Brasil, pensado para o celular.
 
 - **Link de acesso (claude.ai)**: https://claude.ai/artifact/CBsPV9bd1gbg2BwFXoFs6o — aberto por ali, os dados ficam salvos na nuvem e aparecem iguais no celular e no computador.
 - **Sem instalação e sem servidor**: abra o arquivo no navegador (ou publique junto com o site). Funciona offline.
@@ -105,8 +105,21 @@ Aplicar um manejo a um viveiro ou a “todas as ativas” cria um registro por a
 ### Lembretes (`lembretes`)
 `titulo`, `tipo` (de manejo), `intervaloDias`, `proxima` (data), `alvoTipo` (`todas` \| `local` \| `ave` \| `geral`), `alvo`, `ativo`, `obs`. “✓ Feito hoje” grava o manejo e reagenda.
 
+### Espécies (`especies`)
+`nome`, `diasEclosao` (incubação: último ovo → eclosão), `diaAnilhamento` (a partir de qual dia de vida anilhar), `maturidadeDias` (idade para definir o sexo), `diametroAnilha`, `obs`. Vêm prontas: canário (13), periquito-australiano (18), calopsita (19), agapornis (23), diamante-mandarim (13) e diamante-de-gould (15), todas editáveis. Cada ave tem `especieId`; a espécie de uma postura é a da fêmea do casal.
+
+### Clubes (`clubes`)
+`nome`, `sigla`, `federacao`, `numeroCriador`, `anuidadeValidade` (data), `contato`, `obs`.
+
+### Lotes de anilhas (`lotesAnilhas`)
+`clubeId` → Clubes, `especieId` (vazio = qualquer), `ano`, `prefixo`, `inicio`, `fim`, `digitos`, `diametro`, `obs`. A anilha é `prefixo + número` com zeros à esquerda (ex.: `HG 26` + 3 dígitos → `HG 26 001`). Anilhas usadas e a próxima livre são calculadas comparando com as aves cadastradas; o clube de uma ave vem do lote da anilha (ou de `aves.clubeId`, quando informado).
+
+### Campeonatos (`eventos`) e inscrições (`inscricoes`)
+- **eventos**: `nome`, `tipo` (`exposicao` \| `canto` \| `outro`), `clubeId` ou `organizador`, `local`, `dataInicio`, `dataFim`, `prazoInscricao`, `taxa`, `obs`, `checklist` (lista de itens de preparação com `t` e `ok`).
+- **inscricoes**: `eventoId` → Eventos, `modalidade` (`individual` \| `equipe`), `anilhas` (lista de anilhas → Aves), `classe`, `juiz`, `pontos`, `colocacao`, `premio`, `obs` (notas da ficha).
+
 ### Configurações (`cfg`)
-`diasEclosao` (padrão 13), `inicioTemporada` (mês, padrão 7 = julho; 1 = ano civil), `ultimoBackup`.
+`inicioTemporada` (mês, padrão 7 = julho; 1 = ano civil), `especiePadrao`, `ultimoBackup`. (`diasEclosao` é legado: os dias de incubação agora ficam em cada espécie.)
 
 ---
 
@@ -130,6 +143,9 @@ Mostrados por temporada (ou geral), **por casal**, **por linhagem**, **resumo me
 - Lembretes de manejo vencidos, de hoje ou dos próximos 2 dias
 - Aves com 5+ meses e sexo indeterminado
 - Backup com mais de 30 dias
+- Prazo de inscrição de campeonato em até 7 dias e campeonato em até 3 dias (com itens de preparação pendentes)
+- Anuidade de clube vencida ou vencendo em até 30 dias
+- Lote de anilhas do ano com 5 ou menos anilhas livres
 
 ## 4. Dados de exemplo
 
@@ -157,3 +173,9 @@ Na primeira abertura toque em **Carregar dados de exemplo** (ou ☰ → Ajuda e 
 2. Informe quantos nasceram (e as anilhas, se já tiver). Os ovos viram “eclodido” e os filhotes são criados com pai, mãe, linhagem e local do casal.
 3. Sem anilha? Deixe em branco: entram como `S/A-1`, `S/A-2`… e a partir do 5º dia o Início avisa **💍 Anilhar** (a troca de anilha atualiza todas as referências).
 4. Se um filhote morrer: abra a ave → **† Morte** → data e motivo.
+
+### Clubes, anilhas e campeonatos
+1. ☰ → **🐦 Espécies**: confira os dias de incubação, de anilhamento e a idade de sexagem das espécies que você cria.
+2. ☰ → **🏛️ Clubes e anilhas**: cadastre cada clube e os lotes de anilhas recebidos. Ao anilhar, o app já preenche as próximas anilhas livres.
+3. Aba **🏆 Torneios** → ＋ Novo campeonato. Abra o evento para marcar o checklist de preparação e **＋ Inscrever ave** (individual ou equipe).
+4. Depois do julgamento, toque na inscrição e lance pontos, colocação e prêmio. Em **Resultados** aparecem os rankings por linhagem e por casal.
