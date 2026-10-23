@@ -172,8 +172,6 @@
 <header class="top">
   <h1>🐤 Canaril</h1>
   <span id="sync" class="sync" role="status"></span>
-  <button data-act="perfil" aria-label="Meu perfil de criador">👤</button>
-  <button data-act="buscar" aria-label="Buscar anilha">🔍</button>
   <button data-act="menu" aria-label="Dados, exportação e ajuda">☰</button>
 </header>
 
@@ -306,7 +304,7 @@ const myTag = uid(), lastSent = {};
 function setSync(st, err) {
   syncState = st;
   const el = $('#sync');
-  el.textContent = { local: '', saving: '⏳ salvando', ok: '☁️ salvo', err: '⚠️ sem sincronizar', ro: '👁️ só leitura' }[st] || '';
+  el.textContent = st === 'saving' ? '☁️ salvando…' : '';
   if (st === 'err' && err) toast(err.code === 'quota_exceeded' ? 'Espaço na nuvem esgotado. Exporte um backup.' : 'Falha ao salvar na nuvem; os dados seguem neste aparelho.');
 }
 function chunksOf(state) {
