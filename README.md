@@ -132,7 +132,7 @@ Mostrados por temporada (ou geral), **por casal**, **por linhagem**, **resumo me
 
 ## 4. Dados de exemplo
 
-Na primeira abertura toque em **Carregar dados de exemplo** (ou ☰ → Ajuda e testes). São 40 aves, 6 casais, 2 temporadas, posturas em várias fases (atrasada, eclodindo hoje, aguardando ovoscopia, filhotes para anilhar), manejos e lembretes. As datas são relativas ao dia de hoje, então os alertas sempre aparecem. Para começar de verdade: ☰ → **Apagar tudo**.
+Na primeira abertura toque em **Carregar dados de exemplo** (ou ☰ → Ajuda e testes). São 39 aves, 6 casais, 2 temporadas, posturas em várias fases (atrasada, eclodindo hoje, aguardando ovoscopia, filhotes para anilhar), manejos e lembretes. As datas são relativas ao dia de hoje, então os alertas sempre aparecem. Para começar de verdade: ☰ → **Apagar tudo**.
 
 ---
 
