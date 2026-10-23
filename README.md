@@ -2,9 +2,10 @@
 
 Aplicativo de página única (`canarios/index.html`) para controlar uma criação de canários: cadastro de aves, casais, posturas, ovos, choco, nascimentos, saúde/manejo e relatórios. Em português do Brasil, pensado para o celular.
 
+- **Link de acesso (claude.ai)**: https://claude.ai/artifact/CBsPV9bd1gbg2BwFXoFs6o — aberto por ali, os dados ficam salvos na nuvem e aparecem iguais no celular e no computador.
 - **Sem instalação e sem servidor**: abra o arquivo no navegador (ou publique junto com o site). Funciona offline.
-- **Dados salvos no próprio aparelho** (`localStorage` do navegador). Use **☰ → Salvar backup** com frequência: o arquivo `.json` serve de cópia de segurança e para levar os dados a outro aparelho (**Restaurar backup**).
-- **Exportação**: Excel (`.xls` com todas as tabelas + aba de indicadores) e CSV por tabela (separador `;`, abre direto no Excel em pt-BR).
+- **Aberto como arquivo ou pelo site**, os dados ficam no próprio aparelho (`localStorage` do navegador). Use **☰ → Salvar backup** com frequência: o arquivo `.json` serve de cópia de segurança e para levar os dados a outro aparelho (**Restaurar backup**).
+- **Exportação**: Excel (`.xlsx` com todas as tabelas + aba de indicadores) e CSV por tabela (separador `;`, abre direto no Excel em pt-BR).
 - No celular, use “Adicionar à tela inicial” do navegador para abrir como app.
 
 ---
