@@ -1,6 +1,6 @@
 # Canaril — Sistema de gestão de canários
 
-Aplicativo de página única (`canarios/index.html`) para controlar um criatório de canários e outras espécies: cadastro de aves, casais, posturas, ovos, choco, nascimentos, saúde/manejo, clubes e anilhas, campeonatos e relatórios. Em português do Brasil, pensado para o celular.
+Aplicativo de página única (`index.html`) para controlar um criatório de canários e outras espécies: cadastro de aves, casais, posturas, ovos, choco, nascimentos, saúde/manejo, clubes e anilhas, campeonatos e relatórios. Em português do Brasil, pensado para o celular.
 
 - **Link de acesso (claude.ai)**: https://claude.ai/artifact/CBsPV9bd1gbg2BwFXoFs6o — aberto por ali, os dados ficam salvos na nuvem e aparecem iguais no celular e no computador.
 - **Compartilhar para teste**: cada pessoa que abre o link tem a sua própria área de dados (`data/users/<id>/` no banco do artifact), invisível para as outras. Para salvar na nuvem, o convidado precisa ser adicionado como **Editor** pelo menu Compartilhar do claude.ai, com o acesso por link público desligado; sem isso, os dados dele ficam só no navegador e o app avisa.
