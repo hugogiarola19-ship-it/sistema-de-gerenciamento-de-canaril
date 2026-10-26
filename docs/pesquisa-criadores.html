@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Pesquisa com criadores — Canaril</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root { --ink: #1d1d1b; --mu: #5f5e57; --line: #c9c6b8; --ac: #f2c200; --soft: #fbf6dc; }
+  * { box-sizing: border-box; }
+  body { font: 10.5pt/1.4 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; color: var(--ink); margin: 0; }
+  header { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid var(--ac); padding-bottom: 8px; margin-bottom: 10px; }
+  header img { width: 46px; height: 46px; border-radius: 10px; }
+  h1 { font-size: 17pt; margin: 0; line-height: 1.15; }
+  .sub { color: var(--mu); font-size: 9.5pt; }
+  .intro { background: var(--soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 9.5pt; }
+  .ident { display: grid; grid-template-columns: 1.4fr 1fr 0.6fr; gap: 6px 14px; margin: 6px 0 4px; font-size: 9.5pt; }
+  .ident div { border-bottom: 1px solid var(--line); padding-top: 12px; color: var(--mu); }
+  h2 { font-size: 11.5pt; margin: 14px 0 6px; break-inside: avoid; padding: 4px 8px; background: var(--ink); color: #fff; border-radius: 4px; break-after: avoid; }
+  .q { margin: 7px 0 9px; break-inside: avoid; }
+  .q > b { display: block; margin-bottom: 3px; }
+  .q > b span { color: var(--mu); font-weight: 400; font-size: 9pt; }
+  .opts { display: flex; flex-wrap: wrap; gap: 3px 16px; }
+  .opts.col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
+  .opts.col3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px 12px; }
+  .o { display: inline-flex; align-items: baseline; gap: 6px; }
+  .o::before { content: ""; width: 10px; height: 10px; border: 1.3px solid var(--ink); border-radius: 2px; flex: none; transform: translateY(1px); }
+  .r .o::before { border-radius: 50%; }
+  .lines div { border-bottom: 1px solid var(--line); height: 20px; }
+  .outro { border-bottom: 1px solid var(--line); display: inline-block; min-width: 120px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  h2 + .hint, h2 + table, h2 + .q { break-before: avoid; }
+  th, td { border-bottom: 1px solid #e5e2d6; padding: 4px 4px; text-align: center; }
+  th { font-size: 8.5pt; color: var(--mu); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  td.c::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 1.3px solid var(--ink); border-radius: 50%; }
+  tr { break-inside: avoid; }
+  .hint { color: var(--mu); font-size: 9pt; margin: 2px 0 6px; }
+  .scale { display: flex; gap: 12px; align-items: center; font-size: 9.5pt; }
+  .scale .o { gap: 4px; }
+  footer { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 6px; font-size: 8.5pt; color: var(--mu); }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../icons/icon-192.png" alt="">
+  <div>
+    <h1>Pesquisa com criadores de canários e outras aves</h1>
+    <div class="sub">Canaril · aplicativo de gestão de criatório · cerca de 10 minutos</div>
+  </div>
+</header>
+
+<div class="intro">Estamos desenvolvendo um aplicativo gratuito para ajudar criadores a controlar plantel, reprodução, saúde, clubes e campeonatos pelo celular. Suas respostas vão mostrar o que é mais útil no dia a dia do criatório. <b>Não há respostas certas ou erradas.</b> Os dados de identificação são opcionais.</div>
+
+<div class="ident"><div>Nome (opcional):</div><div>Cidade / UF:</div><div>Data:</div></div>
+
+<h2>1. Sobre você e o seu criatório</h2>
+<div class="q r"><b>1.1 Há quanto tempo você cria aves?</b>
+  <div class="opts"><span class="o">Menos de 2 anos</span><span class="o">2 a 5 anos</span><span class="o">6 a 10 anos</span><span class="o">11 a 20 anos</span><span class="o">Mais de 20 anos</span></div></div>
+<div class="q r"><b>1.2 Quantas aves você tem hoje, aproximadamente?</b>
+  <div class="opts"><span class="o">Até 20</span><span class="o">21 a 50</span><span class="o">51 a 100</span><span class="o">101 a 200</span><span class="o">Mais de 200</span></div></div>
+<div class="q r"><b>1.3 Quantos casais você forma por temporada?</b>
+  <div class="opts"><span class="o">Até 5</span><span class="o">6 a 10</span><span class="o">11 a 20</span><span class="o">21 a 40</span><span class="o">Mais de 40</span></div></div>
+<div class="q"><b>1.4 Quais espécies você cria? <span>(marque todas)</span></b>
+  <div class="opts col3"><span class="o">Canário de cor</span><span class="o">Canário de porte / postura</span><span class="o">Canário de canto</span><span class="o">Periquito-australiano</span><span class="o">Calopsita</span><span class="o">Agapornis</span><span class="o">Diamante-mandarim</span><span class="o">Diamante-de-gould</span><span class="o">Nativas (SISPASS)</span></div>
+  <div style="margin-top:4px">Outras: <span class="outro" style="min-width:380px">&nbsp;</span></div></div>
+<div class="q r"><b>1.5 Você é sócio de clube ou associação de criadores?</b>
+  <div class="opts"><span class="o">Não</span><span class="o">Sim, de 1</span><span class="o">Sim, de 2</span><span class="o">Sim, de 3 ou mais</span></div>
+  <div style="margin-top:4px">Quais? <span class="outro" style="min-width:420px">&nbsp;</span></div></div>
+<div class="q r"><b>1.6 Com que frequência participa de exposições ou campeonatos?</b>
+  <div class="opts"><span class="o">Nunca</span><span class="o">Já participei, mas não todo ano</span><span class="o">1 a 2 por ano</span><span class="o">3 a 5 por ano</span><span class="o">Mais de 5 por ano</span></div></div>
+<div class="q r"><b>1.7 Você vende aves?</b>
+  <div class="opts"><span class="o">Não</span><span class="o">Às vezes, o excedente</span><span class="o">Sim, com frequência</span><span class="o">É minha principal renda</span></div></div>
+
+<h2>2. Como você controla o criatório hoje</h2>
+<div class="q"><b>2.1 Onde você anota as informações do plantel? <span>(marque todas)</span></b>
+  <div class="opts col3"><span class="o">Caderno / fichas de papel</span><span class="o">Planilha (Excel, Google)</span><span class="o">Aplicativo de celular</span><span class="o">Programa no computador</span><span class="o">Etiqueta na gaiola</span><span class="o">Não anoto, guardo de cabeça</span></div>
+  <div style="margin-top:4px">Se usa aplicativo ou programa, qual? <span class="outro" style="min-width:300px">&nbsp;</span></div></div>
+<div class="q"><b>2.2 O que mais dá trabalho ou se perde no controle atual? <span>(marque até 4)</span></b>
+  <div class="opts col2"><span class="o">Lembrar a data de eclosão de cada ninhada</span><span class="o">Saber quais ovos estavam férteis</span><span class="o">Lembrar a hora de anilhar os filhotes</span><span class="o">Saber pai e mãe de cada ave (genealogia)</span><span class="o">Evitar cruzar parentes (consanguinidade)</span><span class="o">Controlar as anilhas usadas e disponíveis</span><span class="o">Lembrar vermifugação, vitaminas e tratamentos</span><span class="o">Saber quais casais rendem mais</span><span class="o">Controlar vendas, gastos e lucro</span><span class="o">Organizar inscrições e resultados de campeonatos</span><span class="o">Encontrar uma ave rápido pela anilha</span><span class="o">Passar as informações para outra pessoa</span></div>
+  <div style="margin-top:4px">Outro: <span class="outro" style="min-width:420px">&nbsp;</span></div></div>
+<div class="q r"><b>2.3 Quanto tempo por dia você gasta anotando ou procurando informações do criatório?</b>
+  <div class="opts"><span class="o">Quase nada</span><span class="o">Até 10 minutos</span><span class="o">10 a 30 minutos</span><span class="o">Mais de 30 minutos</span></div></div>
+<div class="q"><b>2.4 Já perdeu alguma informação importante (ninhada, genealogia, data) por falta de controle? Conte como foi.</b>
+  <div class="lines"><div></div><div></div></div></div>
+
+<h2>3. Celular e internet</h2>
+<div class="q r"><b>3.1 Qual celular você usa?</b>
+  <div class="opts"><span class="o">Android</span><span class="o">iPhone</span><span class="o">Não uso celular para isso</span></div></div>
+<div class="q r"><b>3.2 Como é a internet no local do criatório?</b>
+  <div class="opts"><span class="o">Boa (Wi-Fi ou 4G estável)</span><span class="o">Fraca ou instável</span><span class="o">Não tem internet</span></div></div>
+<div class="q r"><b>3.3 Você usaria um aplicativo todos os dias, durante o manejo, se ele economizasse seu tempo?</b>
+  <div class="opts"><span class="o">Sim</span><span class="o">Talvez</span><span class="o">Não, prefiro papel</span></div></div>
+<div class="q r"><b>3.4 Alguém mais cuida das aves com você e precisaria acessar as informações?</b>
+  <div class="opts"><span class="o">Não</span><span class="o">Sim, família</span><span class="o">Sim, ajudante / funcionário</span><span class="o">Sim, sócio</span></div></div>
+
+<h2>4. Quais funções são importantes para você?</h2>
+<div class="hint">Para cada item, marque de <b>1</b> (não preciso) a <b>5</b> (indispensável).</div>
+<table>
+  <thead><tr><th>Função</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead>
+  <tbody>
+    <tr><td>Cadastro das aves pela anilha (origem, cor, mutação, linhagem)</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Registro de posturas e de cada ovo (fértil, claro, eclodido)</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Alerta de eclosão próxima ou atrasada</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Acompanhamento do choco (alimentação, sinais de abandono)</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Aviso da hora de anilhar e sugestão da próxima anilha do lote</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Genealogia e pedigree para entregar na venda</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Aviso de consanguinidade ao formar um casal</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Calculadora de cruzamentos (quais mutações vão nascer)</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Saúde: pesagem, vermifugação, tratamentos e lembretes</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Clubes: anuidade, número de criador e lotes de anilhas</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Campeonatos: inscrições, checklist, pontuação e ranking</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Indicadores: fertilidade, eclosão, mortalidade por casal e linhagem</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Financeiro: vendas, despesas e lucro por temporada</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Fotos de cada ave</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Cadastro de compradores e histórico de vendas</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Estoque de ração, sementes e medicamentos</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Funcionar sem internet no criatório</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Exportar para Excel / imprimir relatórios</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    <tr><td>Compartilhar o acesso com família ou ajudante</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+  </tbody>
+</table>
+<div class="q" style="margin-top:8px"><b>4.1 Das funções acima (ou outra que não está na lista), qual faria você abrir o app todos os dias?</b>
+  <div class="lines"><div></div><div></div></div></div>
+
+<h2>5. Se você testou o Canaril</h2>
+<div class="hint">Se ainda não testou, pule para a seção 6.</div>
+<div class="q"><b>5.1 Por quantos dias você usou o app?</b>
+  <div class="opts r"><span class="o">1 dia</span><span class="o">2 a 7 dias</span><span class="o">1 a 2 semanas</span><span class="o">Mais de 2 semanas</span></div></div>
+<div class="q"><b>5.2 Avalie de 1 (muito ruim) a 5 (excelente):</b>
+  <table style="margin-top:4px">
+    <thead><tr><th>Aspecto</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead>
+    <tbody>
+      <tr><td>Facilidade para cadastrar uma ave</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+      <tr><td>Facilidade para registrar ovos e nascimentos</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+      <tr><td>Utilidade dos alertas da tela Início</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+      <tr><td>Clareza dos relatórios</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+      <tr><td>Rapidez do app no celular</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+      <tr><td>Tamanho das letras e botões</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>
+    </tbody>
+  </table></div>
+<div class="q"><b>5.3 O que você mais gostou?</b><div class="lines"><div></div><div></div></div></div>
+<div class="q"><b>5.4 O que atrapalhou, confundiu ou deu erro? Em qual tela?</b><div class="lines"><div></div><div></div><div></div></div></div>
+<div class="q"><b>5.5 Algum nome, termo ou campo não corresponde ao que se usa no seu criatório ou clube?</b><div class="lines"><div></div><div></div></div></div>
+<div class="q r"><b>5.6 Você indicaria o Canaril para outro criador?</b>
+  <div class="scale"><span>Com certeza não</span><span class="o">0</span><span class="o">1</span><span class="o">2</span><span class="o">3</span><span class="o">4</span><span class="o">5</span><span class="o">6</span><span class="o">7</span><span class="o">8</span><span class="o">9</span><span class="o">10</span><span>Com certeza sim</span></div></div>
+
+<h2>6. Valor e clubes</h2>
+<div class="q r"><b>6.1 Se o app tivesse as funções que você marcou como importantes, como preferiria pagar?</b>
+  <div class="opts col2"><span class="o">Só usaria se fosse gratuito</span><span class="o">Gratuito, com versão completa paga</span><span class="o">Até R$ 10 por mês</span><span class="o">De R$ 10 a R$ 20 por mês</span><span class="o">Mais de R$ 20 por mês</span><span class="o">Pagamento único (sem mensalidade)</span></div></div>
+<div class="q"><b>6.2 O que faria você pagar por um app de criatório?</b><div class="lines"><div></div><div></div></div></div>
+<div class="q r"><b>6.3 Seria útil o seu clube usar o app para distribuir anilhas, receber inscrições e divulgar resultados de campeonatos?</b>
+  <div class="opts"><span class="o">Muito útil</span><span class="o">Útil</span><span class="o">Indiferente</span><span class="o">Não seria útil</span></div></div>
+<div class="q"><b>6.4 Quem cuida das anilhas e campeonatos no seu clube? <span>(nome e contato, se puder indicar)</span></b><div class="lines"><div></div></div></div>
+
+<h2>7. Para terminar</h2>
+<div class="q"><b>7.1 Que outra ideia, reclamação ou sugestão você tem para um app de criatório?</b><div class="lines"><div></div><div></div><div></div></div></div>
+<div class="q r"><b>7.2 Você aceita testar as próximas versões do app e dar sua opinião?</b>
+  <div class="opts"><span class="o">Sim</span><span class="o">Não</span></div>
+  <div class="ident" style="grid-template-columns:1fr 1fr"><div>WhatsApp:</div><div>E-mail:</div></div></div>
+
+<footer>Obrigado pela participação! As informações desta pesquisa serão usadas apenas para melhorar o aplicativo Canaril e não serão compartilhadas com terceiros. Os dados de contato são opcionais e só serão usados para convidar você a testar o app.</footer>
+</body>
+</html>
