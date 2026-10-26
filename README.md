@@ -190,7 +190,7 @@ Fora do claude.ai, o app usa o Supabase para login (e-mail e senha) e para guard
 
 1. No projeto do Supabase, abra **SQL Editor**, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e rode. Isso cria a tabela `canaril_docs` com RLS: cada usuário só lê e grava as próprias linhas.
 2. Em **Authentication → Providers**, deixe **Email** ligado.
-3. Em `index.html`, preencha `SUPABASE_KEY` com a chave pública do projeto (**Project Settings → API → anon public** ou **publishable**). A `SUPABASE_URL` já está configurada. Nunca use a chave `service_role` no app.
+3. A `SUPABASE_URL` e a chave pública (`SUPABASE_KEY`, do tipo **publishable**) já estão em `index.html`. Nunca coloque a chave `secret`/`service_role` no app.
 4. Publique o `index.html` num endereço com HTTPS (GitHub Pages, Netlify, Vercel ou Cloudflare Pages) e cadastre esse endereço em **Authentication → URL Configuration** (Site URL e Redirect URLs), para os links de confirmação e de nova senha voltarem para o app.
 
 Como funciona:
