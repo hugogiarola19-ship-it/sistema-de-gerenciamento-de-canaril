@@ -295,11 +295,12 @@ function save() {
 }
 
 /* Sincronização na nuvem: quando a página é aberta como Artifact no claude.ai,
-   os dados vão para o banco do artifact (iguais em todos os aparelhos).
+   os dados de cada pessoa vão para a área privada dela no banco do artifact
+   (data/users/<id>/…), iguais em todos os aparelhos dela e invisíveis para os outros.
    Cada tabela é gravada em blocos de até CHUNK linhas; o documento "meta" lista os blocos. */
 const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'];
 const CHUNK = 300;
-let cloud = null, syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
+let cloud = null, cloudBase = '', syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
 const myTag = uid(), lastSent = {};
 function setSync(st, err) {
   syncState = st;
@@ -326,20 +327,20 @@ async function pushCloud() {
     const ch = chunksOf(db), keys = Object.keys(ch);
     for (const k of keys) {
       const js = JSON.stringify(ch[k]);
-      if (lastSent[k] !== js) { await cloud.doc('canaril/' + k).set(ch[k]); lastSent[k] = js; }
+      if (lastSent[k] !== js) { await cloud.doc(cloudBase + '/' + k).set(ch[k]); lastSent[k] = js; }
     }
-    for (const k of Object.keys(lastSent)) if (!ch[k]) { await cloud.doc('canaril/' + k).delete(); delete lastSent[k]; }
+    for (const k of Object.keys(lastSent)) if (!ch[k]) { await cloud.doc(cloudBase + '/' + k).delete(); delete lastSent[k]; }
     cloudRev = uid();
-    await cloud.doc('canaril/meta').set({ chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
+    await cloud.doc(cloudBase + '/meta').set({ chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
     setSync('ok');
   } catch (e) {
-    if (e && e.code === 'invalid_argument') setSync('ro'); else setSync('err', e);
+    if (e && e.code === 'invalid_argument') { setSync('ro'); render(); } else setSync('err', e);
   }
   syncing = false;
   if (syncAgain) { syncAgain = false; pushCloud(); }
 }
-async function pullCloud(meta) {
-  const docs = await Promise.all(meta.chunks.map(k => cloud.doc('canaril/' + k).get()));
+async function pullCloud(meta, base = cloudBase) {
+  const docs = await Promise.all(meta.chunks.map(k => cloud.doc(base + '/' + k).get()));
   const nd = blank(); nd.cfg = { ...nd.cfg, ...(meta.cfg || {}) }; nd.perfil = { ...(meta.perfil || {}) };
   meta.chunks.forEach((k, i) => {
     const t = k.slice(0, k.lastIndexOf('-')), d = docs[i].data();
@@ -354,13 +355,21 @@ async function initCloud() {
   let d = null;
   try { d = await window.claude.use('db'); } catch (e) { d = null; }
   if (!d) return;
-  cloud = d; setSync('saving');
+  let u = null, id = null;
+  try { u = await window.claude.use('user'); id = u ? await u.id() : null; } catch (e) { id = null; }
+  if (!id) return; // sem identificação: os dados ficam só neste navegador
+  cloud = d; cloudBase = 'data/users/' + id; setSync('saving');
   try {
-    const m = await cloud.doc('canaril/meta').get();
+    const m = await cloud.doc(cloudBase + '/meta').get();
     if (m.exists) { const md = m.data(); cloudRev = md.rev; await pullCloud(md); setSync('ok'); }
-    else if (db.aves.length || db.casais.length) await pushCloud();
-    else setSync('ok');
-    cloud.doc('canaril/meta').onSnapshot(sn => {
+    else {
+      // Dados da primeira versão (área compartilhada "canaril"): só o dono os lê; copia para a área privada dele
+      const old = (await u.isOwner()) ? await cloud.doc('canaril/meta').get() : null;
+      if (old && old.exists) { await pullCloud(old.data(), 'canaril'); Object.keys(lastSent).forEach(k => delete lastSent[k]); await pushCloud(); }
+      else if (db.aves.length || db.casais.length) await pushCloud();
+      else setSync('ok');
+    }
+    cloud.doc(cloudBase + '/meta').onSnapshot(sn => {
       if (!sn.exists) return;
       const md = sn.data();
       if (md.by !== myTag && md.rev !== cloudRev) { cloudRev = md.rev; pullCloud(md).then(() => toast('Dados atualizados de outro aparelho')); }
@@ -654,6 +663,7 @@ VIEWS.home = () => {
   const chocos = db.chocos.filter(c => c.status === 'chocando');
   curList = homeBusca;
   return `
+    ${syncState === 'ro' ? '<div class="alert a-warn"><div class="ic">📱</div><div class="grow"><b>Seus dados estão só neste aparelho</b><div class="mu">Seu acesso a este link não permite salvar na nuvem. Peça a quem compartilhou para te convidar como Editor. Até lá, faça backups pelo menu ☰.</div></div></div>' : ''}
     ${storageOk ? '' : '<div class="alert a-bad"><div class="ic">⚠️</div><div>O navegador não está permitindo salvar. Exporte um backup antes de fechar a página.</div></div>'}
     ${db.perfil.nome ? `<div class="li" data-act="perfil"><div class="sx sx-I">👤</div><div class="grow"><b>${esc(db.perfil.criatorio || db.perfil.nome)}</b><div class="mu">${esc(db.perfil.criatorio ? db.perfil.nome : '')}${db.perfil.criatorio && db.clubes.length ? ' · ' : ''}${db.clubes.length ? esc(db.clubes.map(c => c.sigla || c.nome).join(', ')) : ''}</div></div></div>` : ''}
     <input class="search" type="search" placeholder="🔍 Buscar pela anilha…" data-f="home.q" value="${esc(F.home.q)}" id="homeQ" autocomplete="off">
