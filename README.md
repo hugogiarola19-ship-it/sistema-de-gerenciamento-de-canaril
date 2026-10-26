@@ -183,3 +183,19 @@ Na primeira abertura toque em **Carregar dados de exemplo** (ou ☰ → Ajuda e 
 2. ☰ → **🏛️ Clubes e anilhas**: cadastre cada clube e os lotes de anilhas recebidos. Ao anilhar, o app já preenche as próximas anilhas livres.
 3. Aba **🏆 Torneios** → ＋ Novo campeonato. Abra o evento para marcar o checklist de preparação e **＋ Inscrever ave** (individual ou equipe).
 4. Depois do julgamento, toque na inscrição e lance pontos, colocação e prêmio. Em **Resultados** aparecem os rankings por linhagem e por casal.
+
+## Versão independente com Supabase (login e nuvem própria)
+
+Fora do claude.ai, o app usa o Supabase para login (e-mail e senha) e para guardar os dados de cada criador.
+
+1. No projeto do Supabase, abra **SQL Editor**, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e rode. Isso cria a tabela `canaril_docs` com RLS: cada usuário só lê e grava as próprias linhas.
+2. Em **Authentication → Providers**, deixe **Email** ligado.
+3. Em `index.html`, preencha `SUPABASE_KEY` com a chave pública do projeto (**Project Settings → API → anon public** ou **publishable**). A `SUPABASE_URL` já está configurada. Nunca use a chave `service_role` no app.
+4. Publique o `index.html` num endereço com HTTPS (GitHub Pages, Netlify, Vercel ou Cloudflare Pages) e cadastre esse endereço em **Authentication → URL Configuration** (Site URL e Redirect URLs), para os links de confirmação e de nova senha voltarem para o app.
+
+Como funciona:
+- Tela de entrada com **Entrar**, **Criar conta**, **Esqueci a senha** e **Usar sem conta** (dados só no aparelho).
+- Cada tabela é gravada em blocos (`aves-0`, `ovos-0`…) mais um documento `meta`, na tabela `canaril_docs` (`user_id`, `chave`, `dados` jsonb). O app confere mudanças de outros aparelhos a cada 30 s e quando volta para a tela.
+- No primeiro login, se houver dados salvos no aparelho sem conta, o app oferece enviá-los para a conta.
+- Para trazer dados do link do claude.ai: lá, ☰ → Salvar backup; aqui, ☰ → Restaurar backup.
+- Dentro do claude.ai (Artifact) o mesmo arquivo continua usando o banco do claude.ai; o Supabase não é usado ali.

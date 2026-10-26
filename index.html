@@ -37,6 +37,7 @@
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; background: none; border: 0; }
   .hidden { display: none !important; }
+  [hidden] { display: none !important; }
 
   .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 8px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--ac); color: var(--ac-tx); }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ac); }
@@ -275,9 +276,10 @@ function migrate(d) {
   return ch;
 }
 let storageOk = true;
-function load() {
+let KEY_LOCAL = KEY; // com conta Supabase, cada usuário tem seu próprio cache neste aparelho
+function load(key = KEY_LOCAL) {
   try {
-    const s = localStorage.getItem(KEY);
+    const s = localStorage.getItem(key);
     if (s) { const d = JSON.parse(s); const b = blank(); return { ...b, ...d, cfg: { ...b.cfg, ...(d.cfg || {}) } }; }
   } catch (e) { storageOk = false; }
   return blank();
@@ -285,7 +287,7 @@ function load() {
 let db = load();
 migrate(db);
 function saveLocal() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)); storageOk = true; }
+  try { localStorage.setItem(KEY_LOCAL, JSON.stringify(db)); storageOk = true; }
   catch (e) { storageOk = false; }
 }
 function save() {
@@ -294,19 +296,50 @@ function save() {
   else if (!storageOk) toast('Não foi possível salvar no navegador. Exporte um backup!');
 }
 
-/* Sincronização na nuvem: quando a página é aberta como Artifact no claude.ai,
-   os dados de cada pessoa vão para a área privada dela no banco do artifact
-   (data/users/<id>/…), iguais em todos os aparelhos dela e invisíveis para os outros.
+/* Sincronização na nuvem. Há dois "backends" com a mesma interface (get/set/del/getMany/watch):
+   - claude.ai (quando a página é aberta como Artifact): área privada de cada pessoa em data/users/<id>/…
+   - Supabase (versão independente, com login): tabela canaril_docs, protegida por RLS (cada usuário só vê as próprias linhas).
    Cada tabela é gravada em blocos de até CHUNK linhas; o documento "meta" lista os blocos. */
+const SUPABASE_URL = 'https://eiqbpeezohahzizvffcu.supabase.co';
+const SUPABASE_KEY = ''; // chave pública do projeto (Project Settings → API → "anon public" ou "publishable")
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
 const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'];
 const CHUNK = 300;
-let cloud = null, cloudBase = '', syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
+let cloud = null, stopWatch = null, syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
 const myTag = uid(), lastSent = {};
 function setSync(st, err) {
   syncState = st;
   const el = $('#sync');
   el.textContent = st === 'saving' ? '☁️ salvando…' : '';
   if (st === 'err' && err) toast(err.code === 'quota_exceeded' ? 'Espaço na nuvem esgotado. Exporte um backup.' : 'Falha ao salvar na nuvem; os dados seguem neste aparelho.');
+}
+function claudeBackend(d, base) {
+  return {
+    name: 'claude',
+    async get(k) { const sn = await d.doc(base + '/' + k).get(); return sn.exists ? JSON.parse(JSON.stringify(sn.data())) : null; },
+    async set(k, o) { await d.doc(base + '/' + k).set(o); },
+    async del(k) { await d.doc(base + '/' + k).delete(); },
+    async getMany(keys) { const r = await Promise.all(keys.map(k => this.get(k))); return Object.fromEntries(keys.map((k, i) => [k, r[i]])); },
+    watch(cb, onErr) { return d.doc(base + '/meta').onSnapshot(sn => { if (sn.exists) cb(sn.data()); }, onErr); }
+  };
+}
+function supabaseBackend(client, userId) {
+  const T = 'canaril_docs';
+  const chk = r => { if (r.error) throw { code: r.error.code === '42501' ? 'invalid_argument' : 'unavailable', message: r.error.message }; return r; };
+  return {
+    name: 'supabase',
+    async get(k) { const r = chk(await client.from(T).select('dados').eq('chave', k).maybeSingle()); return r.data ? r.data.dados : null; },
+    async set(k, o) { chk(await client.from(T).upsert({ user_id: userId, chave: k, dados: o, atualizado_em: new Date().toISOString() }, { onConflict: 'user_id,chave' })); },
+    async del(k) { chk(await client.from(T).delete().eq('chave', k)); },
+    async getMany(keys) { const r = chk(await client.from(T).select('chave,dados').in('chave', keys)); const m = {}; (r.data || []).forEach(x => m[x.chave] = x.dados); return m; },
+    watch(cb) {
+      // Sem realtime: confere o "meta" a cada 30 s e quando o app volta para a tela
+      const tick = async () => { if (document.hidden) return; try { const m = await this.get('meta'); if (m) cb(m); } catch (e) { /* tenta de novo no próximo ciclo */ } };
+      const iv = setInterval(tick, 30000);
+      document.addEventListener('visibilitychange', tick); window.addEventListener('focus', tick);
+      return () => { clearInterval(iv); document.removeEventListener('visibilitychange', tick); window.removeEventListener('focus', tick); };
+    }
+  };
 }
 function chunksOf(state) {
   const out = {};
@@ -321,17 +354,19 @@ function scheduleSync() {
   setSync('saving'); clearTimeout(syncTimer); syncTimer = setTimeout(pushCloud, 700);
 }
 async function pushCloud() {
+  if (!cloud) return;
   if (syncing) { syncAgain = true; return; }
   syncing = true;
+  const alvo = cloud;
   try {
     const ch = chunksOf(db), keys = Object.keys(ch);
     for (const k of keys) {
       const js = JSON.stringify(ch[k]);
-      if (lastSent[k] !== js) { await cloud.doc(cloudBase + '/' + k).set(ch[k]); lastSent[k] = js; }
+      if (lastSent[k] !== js) { await alvo.set(k, ch[k]); lastSent[k] = js; }
     }
-    for (const k of Object.keys(lastSent)) if (!ch[k]) { await cloud.doc(cloudBase + '/' + k).delete(); delete lastSent[k]; }
+    for (const k of Object.keys(lastSent)) if (!ch[k]) { await alvo.del(k); delete lastSent[k]; }
     cloudRev = uid();
-    await cloud.doc(cloudBase + '/meta').set({ chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
+    await alvo.set('meta', { chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
     setSync('ok');
   } catch (e) {
     if (e && e.code === 'invalid_argument') { setSync('ro'); render(); } else setSync('err', e);
@@ -339,42 +374,166 @@ async function pushCloud() {
   syncing = false;
   if (syncAgain) { syncAgain = false; pushCloud(); }
 }
-async function pullCloud(meta, base = cloudBase) {
-  const docs = await Promise.all(meta.chunks.map(k => cloud.doc(base + '/' + k).get()));
+async function pullCloud(meta, src = cloud) {
+  const docs = await src.getMany(meta.chunks);
   const nd = blank(); nd.cfg = { ...nd.cfg, ...(meta.cfg || {}) }; nd.perfil = { ...(meta.perfil || {}) };
-  meta.chunks.forEach((k, i) => {
-    const t = k.slice(0, k.lastIndexOf('-')), d = docs[i].data();
+  meta.chunks.forEach(k => {
+    const t = k.slice(0, k.lastIndexOf('-')), d = docs[k];
     if (d && Array.isArray(nd[t])) { nd[t].push(...JSON.parse(JSON.stringify(d.rows || []))); lastSent[k] = JSON.stringify(d); }
   });
   db = nd; const mig = migrate(db); saveLocal(); render();
   if (mig) scheduleSync();
   if (stack.length && !stack[stack.length - 1].form) paint(true);
 }
-async function initCloud() {
-  if (!window.claude || !window.claude.use) return;
+/* Liga um backend: baixa os dados da nuvem (ou envia os locais, se a nuvem estiver vazia) e passa a acompanhar mudanças */
+async function conectarBackend(be, { legado = null, oferecerLocal = false } = {}) {
+  cloud = be; Object.keys(lastSent).forEach(k => delete lastSent[k]); setSync('saving');
+  try {
+    const md = await be.get('meta');
+    if (md) { cloudRev = md.rev; await pullCloud(md); setSync('ok'); }
+    else if (legado && await legado.get('meta')) { await pullCloud(await legado.get('meta'), legado); Object.keys(lastSent).forEach(k => delete lastSent[k]); await pushCloud(); }
+    else if (db.aves.length || db.casais.length) await pushCloud();
+    else {
+      setSync('ok');
+      const local = oferecerLocal ? load(KEY) : null;
+      if (local && local.aves.length) ask(`Encontramos ${local.aves.length} ave(s) salvas neste aparelho sem conta. Enviar esses dados para a sua conta?`, () => {
+        db = local; migrate(db); save(); render(); toast('Dados enviados para a sua conta');
+      }, { ok: 'Enviar para a conta' });
+    }
+    stopWatch = be.watch(m => {
+      if (cloud !== be) return;
+      if (m.by !== myTag && m.rev !== cloudRev) { cloudRev = m.rev; pullCloud(m).then(() => toast('Dados atualizados de outro aparelho')); }
+    }, e => setSync('err', e));
+  } catch (e) { setSync('err', e); }
+}
+function desconectarBackend() {
+  if (stopWatch) { try { stopWatch(); } catch (e) { /* já encerrado */ } }
+  stopWatch = null; cloud = null; clearTimeout(syncTimer); syncState = 'local';
+  Object.keys(lastSent).forEach(k => delete lastSent[k]);
+}
+async function initClaude() {
   let d = null;
   try { d = await window.claude.use('db'); } catch (e) { d = null; }
   if (!d) return;
   let u = null, id = null;
   try { u = await window.claude.use('user'); id = u ? await u.id() : null; } catch (e) { id = null; }
   if (!id) return; // sem identificação: os dados ficam só neste navegador
-  cloud = d; cloudBase = 'data/users/' + id; setSync('saving');
+  // Dados da primeira versão (área compartilhada "canaril"): só o dono os lê; são copiados para a área privada dele
+  const legado = (await u.isOwner()) ? claudeBackend(d, 'canaril') : null;
+  await conectarBackend(claudeBackend(d, 'data/users/' + id), { legado });
+}
+
+/* Conta (Supabase): login, cadastro, nova senha e uso sem conta */
+let sb = null, sbUser = null, authGate = false, authModo = 'entrar', authMsg = '';
+let recuperando = /type=recovery/.test(location.hash);
+const temSupabase = () => !!(SUPABASE_URL && SUPABASE_KEY) && !(window.claude && window.claude.use);
+function semConta() { try { return localStorage.getItem(KEY + ':semConta') === '1'; } catch (e) { return false; } }
+function setSemConta(v) { try { v ? localStorage.setItem(KEY + ':semConta', '1') : localStorage.removeItem(KEY + ':semConta'); } catch (e) { /* sem armazenamento */ } }
+function loadScript(src, global) {
+  if (window[global]) return Promise.resolve(window[global]);
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = src;
+    sc.onload = () => window[global] ? res(window[global]) : rej(new Error(global)); sc.onerror = rej;
+    document.head.appendChild(sc);
+  });
+}
+async function iniciarSupabase() {
+  authGate = true; authMsg = 'Conectando…'; render();
+  try { await loadScript(SUPABASE_JS, 'supabase'); }
+  catch (e) { authMsg = 'Sem conexão com o servidor. Verifique a internet ou use sem conta (dados só neste aparelho).'; render(); return; }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb.auth.onAuthStateChange((ev, session) => {
+    // Não chamar o Supabase dentro deste callback: agenda para depois
+    setTimeout(() => {
+      if (ev === 'PASSWORD_RECOVERY') { recuperando = true; authModo = 'novaSenha'; authMsg = ''; authGate = true; render(); }
+      if (session && session.user && (!sbUser || sbUser.id !== session.user.id)) entrar(session.user);
+      if (ev === 'SIGNED_OUT' && sbUser) fecharSessao();
+    }, 0);
+  });
+  const { data } = await sb.auth.getSession();
+  if (data && data.session) entrar(data.session.user);
+  else { authMsg = ''; if (recuperando) authModo = 'novaSenha'; render(); }
+}
+function entrar(user) {
+  if (sbUser && sbUser.id === user.id) return;
+  sbUser = user; KEY_LOCAL = KEY + ':' + user.id;
+  db = load(); migrate(db); stack.length = 0; paint();
+  if (recuperando) { authModo = 'novaSenha'; authGate = true; } else { authGate = false; authMsg = ''; view = 'home'; }
+  render();
+  conectarBackend(supabaseBackend(sb, user.id), { oferecerLocal: true });
+}
+function fecharSessao() {
+  desconectarBackend(); sbUser = null; KEY_LOCAL = KEY;
+  db = blank(); migrate(db); stack.length = 0; paint();
+  authGate = true; authModo = 'entrar'; authMsg = ''; view = 'home'; render();
+}
+async function sairDaConta() {
+  if (syncing || syncTimer) { clearTimeout(syncTimer); await pushCloud(); }
+  try { await sb.auth.signOut(); } catch (e) { /* encerra localmente mesmo sem rede */ }
+  fecharSessao(); toast('Você saiu da conta');
+}
+function traduzErro(e) {
+  const m = (e && (e.message || e.msg)) || '';
+  if (/invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos.';
+  if (/email not confirmed/i.test(m)) return 'Confirme o seu e-mail pelo link que enviamos antes de entrar.';
+  if (/already registered|already been registered/i.test(m)) return 'Este e-mail já tem conta. Toque em “Já tenho conta”.';
+  if (/rate limit|too many/i.test(m)) return 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.';
+  if (/password/i.test(m) && /6|short|weak/i.test(m)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if (/fetch|network/i.test(m)) return 'Sem conexão com o servidor. Verifique a internet.';
+  return 'Não foi possível concluir: ' + m;
+}
+function loginHTML() {
+  const m = authModo;
+  const tit = { entrar: 'Entre para acessar seu criatório em qualquer aparelho.', criar: 'Crie sua conta gratuita.', esqueci: 'Informe o seu e-mail para receber o link de nova senha.', novaSenha: 'Defina a sua nova senha.' }[m];
+  const ok = { entrar: 'Entrar', criar: 'Criar conta', esqueci: 'Enviar link', novaSenha: 'Salvar nova senha' }[m];
+  return `<div class="card" style="margin:16px auto 0;max-width:440px">
+    <h2 style="margin-top:0">🐤 Canaril</h2>
+    <p class="mu" style="margin-bottom:12px">${tit}</p>
+    ${authMsg ? `<div class="alert a-info" style="cursor:default"><div class="grow">${esc(authMsg)}</div></div>` : ''}
+    ${sb ? `<form id="authForm" novalidate>
+      ${m !== 'novaSenha' ? '<div class="fld"><label for="auEmail">E-mail</label><input id="auEmail" name="email" type="email" autocomplete="email" inputmode="email"></div>' : ''}
+      ${m !== 'esqueci' ? `<div class="fld"><label for="auSenha">${m === 'novaSenha' ? 'Nova senha' : 'Senha'}</label><input id="auSenha" name="senha" type="password" autocomplete="${m === 'entrar' ? 'current-password' : 'new-password'}" placeholder="${m === 'entrar' ? '' : 'Mínimo de 6 caracteres'}"></div>` : ''}
+      <button class="btn pri full" type="submit">${ok}</button>
+    </form>
+    <div class="acts" style="justify-content:center;margin-top:12px">
+      ${m !== 'entrar' && m !== 'novaSenha' ? '<button class="btn sm" data-act="auModo" data-id="entrar">Já tenho conta</button>' : ''}
+      ${m === 'entrar' ? '<button class="btn sm" data-act="auModo" data-id="criar">Criar conta</button><button class="btn sm" data-act="auModo" data-id="esqueci">Esqueci a senha</button>' : ''}
+    </div>` : ''}
+    ${m !== 'novaSenha' ? '<p class="mu" style="text-align:center;margin-top:14px"><button class="lk" data-act="semConta">Usar sem conta (dados só neste aparelho)</button></p>' : ''}</div>`;
+}
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'authForm') return;
+  e.preventDefault();
+  const f = e.target, email = f.email ? f.email.value.trim() : '', senha = f.senha ? f.senha.value : '';
+  const volta = location.origin + location.pathname;
+  if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { authMsg = 'Informe um e-mail válido.'; render(); return; }
+  if (f.senha && authModo !== 'entrar' && senha.length < 6) { authMsg = 'A senha precisa ter pelo menos 6 caracteres.'; render(); return; }
+  if (f.senha && !senha) { authMsg = 'Informe a senha.'; render(); return; }
+  f.querySelector('button[type=submit]').disabled = true;
   try {
-    const m = await cloud.doc(cloudBase + '/meta').get();
-    if (m.exists) { const md = m.data(); cloudRev = md.rev; await pullCloud(md); setSync('ok'); }
-    else {
-      // Dados da primeira versão (área compartilhada "canaril"): só o dono os lê; copia para a área privada dele
-      const old = (await u.isOwner()) ? await cloud.doc('canaril/meta').get() : null;
-      if (old && old.exists) { await pullCloud(old.data(), 'canaril'); Object.keys(lastSent).forEach(k => delete lastSent[k]); await pushCloud(); }
-      else if (db.aves.length || db.casais.length) await pushCloud();
-      else setSync('ok');
+    if (authModo === 'entrar') {
+      const r = await sb.auth.signInWithPassword({ email, password: senha }); if (r.error) throw r.error;
+      entrar(r.data.user);
+    } else if (authModo === 'criar') {
+      const r = await sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: volta } }); if (r.error) throw r.error;
+      if (r.data.session) entrar(r.data.user);
+      else { authModo = 'entrar'; authMsg = `Conta criada! Abra o link que enviamos para ${email} para confirmar e depois entre.`; render(); }
+    } else if (authModo === 'esqueci') {
+      const r = await sb.auth.resetPasswordForEmail(email, { redirectTo: volta }); if (r.error) throw r.error;
+      authModo = 'entrar'; authMsg = 'Se o e-mail tiver conta, você vai receber um link para criar uma nova senha.'; render();
+    } else if (authModo === 'novaSenha') {
+      const r = await sb.auth.updateUser({ password: senha }); if (r.error) throw r.error;
+      recuperando = false; history.replaceState(null, '', location.pathname);
+      authGate = false; authMsg = ''; view = 'home';
+      if (!sbUser) entrar(r.data.user); else render();
+      toast('Senha alterada');
     }
-    cloud.doc(cloudBase + '/meta').onSnapshot(sn => {
-      if (!sn.exists) return;
-      const md = sn.data();
-      if (md.by !== myTag && md.rev !== cloudRev) { cloudRev = md.rev; pullCloud(md).then(() => toast('Dados atualizados de outro aparelho')); }
-    }, e => setSync('err', e));
-  } catch (e) { setSync('err', e); }
+  } catch (err) { authMsg = traduzErro(err); render(); }
+});
+function iniciar() {
+  if (window.claude && window.claude.use) { render(); initClaude(); return; }
+  if (temSupabase() && !semConta()) { iniciarSupabase(); return; }
+  render();
 }
 
 /* Diálogo de confirmação (substitui confirm/alert, que podem ser bloqueados) */
@@ -622,6 +781,9 @@ const F = {
 };
 
 function render() {
+  document.querySelector('.tabs').hidden = authGate;
+  document.querySelector('.top [data-act=menu]').hidden = authGate;
+  if (authGate) { curList = null; $('#main').innerHTML = loginHTML(); return; }
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.id === view));
   curList = null;
   $('#main').innerHTML = VIEWS[view]();
@@ -663,7 +825,7 @@ VIEWS.home = () => {
   const chocos = db.chocos.filter(c => c.status === 'chocando');
   curList = homeBusca;
   return `
-    ${syncState === 'ro' ? '<div class="alert a-warn"><div class="ic">📱</div><div class="grow"><b>Seus dados estão só neste aparelho</b><div class="mu">Seu acesso a este link não permite salvar na nuvem. Peça a quem compartilhou para te convidar como Editor. Até lá, faça backups pelo menu ☰.</div></div></div>' : ''}
+    ${syncState === 'ro' ? `<div class="alert a-warn"><div class="ic">📱</div><div class="grow"><b>Seus dados estão só neste aparelho</b><div class="mu">${cloud && cloud.name === 'supabase' ? 'A sua conta não conseguiu gravar na nuvem. Saia e entre de novo pelo menu ☰; até lá, faça backups.' : 'Seu acesso a este link não permite salvar na nuvem. Peça a quem compartilhou para te convidar como Editor. Até lá, faça backups pelo menu ☰.'}</div></div></div>` : ''}
     ${storageOk ? '' : '<div class="alert a-bad"><div class="ic">⚠️</div><div>O navegador não está permitindo salvar. Exporte um backup antes de fechar a página.</div></div>'}
     ${db.perfil.nome ? `<div class="li" data-act="perfil"><div class="sx sx-I">👤</div><div class="grow"><b>${esc(db.perfil.criatorio || db.perfil.nome)}</b><div class="mu">${esc(db.perfil.criatorio ? db.perfil.nome : '')}${db.perfil.criatorio && db.clubes.length ? ' · ' : ''}${db.clubes.length ? esc(db.clubes.map(c => c.sigla || c.nome).join(', ')) : ''}</div></div></div>` : ''}
     <input class="search" type="search" placeholder="🔍 Buscar pela anilha…" data-f="home.q" value="${esc(F.home.q)}" id="homeQ" autocomplete="off">
@@ -1811,15 +1973,7 @@ async function download(content, name, type) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
   return true;
 }
-function loadXLSX() {
-  if (window.XLSX) return Promise.resolve(window.XLSX);
-  return new Promise((res, rej) => {
-    const sc = document.createElement('script');
-    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-    sc.onload = () => window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')); sc.onerror = rej;
-    document.head.appendChild(sc);
-  });
-}
+const loadXLSX = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX');
 const stamp = () => today().replace(/-/g, '');
 function exportCSV(k) {
   const e = EXP[k];
@@ -1876,8 +2030,11 @@ function sDados() {
         <button class="btn pri full" data-act="xls">⬇️ Excel .xlsx (todas as tabelas + indicadores)</button>
         <p class="mu" style="margin:10px 0 6px">CSV por tabela (abre no Excel / Google Planilhas):</p>
         <div class="acts">${Object.entries(EXP).map(([k, e]) => `<button class="btn sm" data-act="csv" data-id="${k}">${e.n}</button>`).join('')}</div></div>
+      ${temSupabase() ? `<div class="card"><h3 style="margin-top:0">Conta</h3>
+        ${sbUser ? `<p class="mu" style="margin-bottom:8px">Conectado como <b>${esc(sbUser.email || '')}</b>. Seus dados ficam salvos na sua conta e aparecem em qualquer aparelho em que você entrar.</p><div class="acts"><button class="btn" data-act="sair">Sair da conta</button></div>`
+          : '<p class="mu" style="margin-bottom:8px">Você está usando sem conta: os dados ficam só neste aparelho. Entre ou crie uma conta para salvar na nuvem e usar em vários aparelhos.</p><div class="acts"><button class="btn pri" data-act="comConta">Entrar ou criar conta</button></div>'}</div>` : ''}
       <div class="card"><h3 style="margin-top:0">Backup</h3>
-        <p class="mu" style="margin-bottom:8px">${cloud ? 'Os dados estão salvos na nuvem do claude.ai e aparecem iguais em todos os aparelhos. O backup é uma cópia extra de segurança.' : 'Os dados ficam só neste navegador. Faça backup com frequência e use-o para passar os dados a outro aparelho.'}${db.cfg.ultimoBackup ? ' Último: ' + fmt(db.cfg.ultimoBackup) + '.' : ''}</p>
+        <p class="mu" style="margin-bottom:8px">${cloud ? (cloud.name === 'supabase' ? 'Os dados estão salvos na sua conta e aparecem iguais em todos os aparelhos. O backup é uma cópia extra de segurança.' : 'Os dados estão salvos na nuvem do claude.ai e aparecem iguais em todos os aparelhos. O backup é uma cópia extra de segurança.') : 'Os dados ficam só neste navegador. Faça backup com frequência e use-o para passar os dados a outro aparelho.'}${db.cfg.ultimoBackup ? ' Último: ' + fmt(db.cfg.ultimoBackup) + '.' : ''}</p>
         <div class="acts"><button class="btn pri" data-act="backup">💾 Salvar backup</button><button class="btn" data-act="restore">📂 Restaurar backup</button></div></div>
       <div class="card"><h3 style="margin-top:0">Configurações</h3>
         <p class="mu">Temporada começa em: <b>${cap(MESES[(db.cfg.inicioTemporada || 1) - 1])}</b> · Espécie padrão: <b>${esc(espAve(null).nome)}</b>. Os dias de incubação ficam em cada espécie.</p>
@@ -2070,6 +2227,10 @@ const ACT = {
   close: () => { stack.length = 0; paint(); },
   fdel: () => { const top = stack[stack.length - 1]; if (top.del) top.del(); },
   menu: () => showSheet(sDados()),
+  auModo: m => { authModo = m; authMsg = ''; render(); },
+  semConta: () => { setSemConta(true); authGate = false; KEY_LOCAL = KEY; db = load(); migrate(db); view = 'home'; render(); toast('Usando sem conta: os dados ficam só neste aparelho'); },
+  comConta: () => { setSemConta(false); stack.length = 0; paint(); if (sb) { authGate = true; authModo = 'entrar'; authMsg = ''; render(); } else iniciarSupabase(); },
+  sair: () => ask('Sair da conta neste aparelho? Seus dados continuam salvos na conta.', () => sairDaConta(), { ok: 'Sair' }),
   perfil: () => showSheet(sPerfil()), editPerfil: () => formPerfil(),
   buscar: () => { view = 'aves'; render(); window.scrollTo(0, 0); $('#avesQ').focus(); },
   novaAve: () => formAve(), ave: id => showSheet(sAve(id)), editAve: id => formAve(aveById(id)),
@@ -2141,8 +2302,7 @@ document.addEventListener('keydown', e => {
   if (stack.length) { stack.pop(); paint(); }
 });
 
-render();
-initCloud();
+iniciar();
 </script>
 </body>
 </html>
