@@ -302,7 +302,7 @@ function save() {
    Cada tabela é gravada em blocos de até CHUNK linhas; o documento "meta" lista os blocos. */
 const SUPABASE_URL = 'https://eiqbpeezohahzizvffcu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_roBKI9cuvFF4_-gwm1ReJQ_eOjfhjIx'; // chave pública (publishable) do projeto: pode ficar no código; nunca use a secret/service_role aqui
-const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js';
 const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'];
 const CHUNK = 300;
 let cloud = null, stopWatch = null, syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
