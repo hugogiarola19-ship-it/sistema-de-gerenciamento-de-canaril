@@ -199,3 +199,13 @@ Como funciona:
 - No primeiro login, se houver dados salvos no aparelho sem conta, o app oferece enviá-los para a conta.
 - Para trazer dados do link do claude.ai: lá, ☰ → Salvar backup; aqui, ☰ → Restaurar backup.
 - Dentro do claude.ai (Artifact) o mesmo arquivo continua usando o banco do claude.ai; o Supabase não é usado ali.
+
+## Instalar no celular (PWA)
+
+Publicado num endereço com HTTPS (ex.: GitHub Pages), o Canaril pode ser instalado como app:
+- **Android (Chrome):** menu ⋮ → **Instalar app**, ou ☰ → **📲 Instalar app** dentro do Canaril.
+- **iPhone (Safari):** Compartilhar → **Adicionar à Tela de Início**.
+
+Instalado, abre pelo ícone em tela cheia e funciona sem internet: o `sw.js` guarda o app no aparelho, as alterações ficam salvas localmente e são enviadas à nuvem quando a conexão volta (alterações feitas offline têm prioridade ao reconectar). Arquivos: `manifest.webmanifest`, `sw.js`, `icons/`. Ao publicar uma versão nova, troque `VERSAO` em `sw.js` para os aparelhos atualizarem o cache das bibliotecas.
+
+Para a **Play Store**, este PWA pode ser empacotado com o PWABuilder (pwabuilder.com) como app Android (TWA).

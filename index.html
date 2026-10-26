@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f2c200">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Canaril">
 <meta name="robots" content="noindex">
 <title>Canaril</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -290,8 +295,12 @@ function saveLocal() {
   try { localStorage.setItem(KEY_LOCAL, JSON.stringify(db)); storageOk = true; }
   catch (e) { storageOk = false; }
 }
+/* Alterações ainda não enviadas à nuvem (sobrevive a fechar o app sem internet) */
+function marcarPendente(v) { try { v ? localStorage.setItem(KEY_LOCAL + ':pendente', '1') : localStorage.removeItem(KEY_LOCAL + ':pendente'); } catch (e) { /* sem armazenamento */ } }
+function temPendente() { try { return localStorage.getItem(KEY_LOCAL + ':pendente') === '1'; } catch (e) { return false; } }
 function save() {
   saveLocal();
+  if (cloud || sbUser) marcarPendente(true);
   if (cloud) scheduleSync();
   else if (!storageOk) toast('Não foi possível salvar no navegador. Exporte um backup!');
 }
@@ -367,9 +376,12 @@ async function pushCloud() {
     for (const k of Object.keys(lastSent)) if (!ch[k]) { await alvo.del(k); delete lastSent[k]; }
     cloudRev = uid();
     await alvo.set('meta', { chunks: keys, cfg: db.cfg, perfil: db.perfil || {}, rev: cloudRev, by: myTag, savedAt: new Date().toISOString() });
+    if (!syncAgain) marcarPendente(false);
     setSync('ok');
   } catch (e) {
-    if (e && e.code === 'invalid_argument') { setSync('ro'); render(); } else setSync('err', e);
+    if (e && e.code === 'invalid_argument') { setSync('ro'); render(); }
+    else if (!navigator.onLine) semInternet();
+    else setSync('err', e);
   }
   syncing = false;
   if (syncAgain) { syncAgain = false; pushCloud(); }
@@ -390,7 +402,8 @@ async function conectarBackend(be, { legado = null, oferecerLocal = false } = {}
   cloud = be; Object.keys(lastSent).forEach(k => delete lastSent[k]); setSync('saving');
   try {
     const md = await be.get('meta');
-    if (md) { cloudRev = md.rev; await pullCloud(md); setSync('ok'); }
+    if (md && temPendente()) { cloudRev = md.rev; await pushCloud(); } // alterações feitas sem internet têm prioridade
+    else if (md) { cloudRev = md.rev; await pullCloud(md); setSync('ok'); }
     else if (legado && await legado.get('meta')) { await pullCloud(await legado.get('meta'), legado); Object.keys(lastSent).forEach(k => delete lastSent[k]); await pushCloud(); }
     else if (db.aves.length || db.casais.length) await pushCloud();
     else {
@@ -402,10 +415,22 @@ async function conectarBackend(be, { legado = null, oferecerLocal = false } = {}
     }
     stopWatch = be.watch(m => {
       if (cloud !== be) return;
-      if (m.by !== myTag && m.rev !== cloudRev) { cloudRev = m.rev; pullCloud(m).then(() => toast('Dados atualizados de outro aparelho')); }
+      if (m.by !== myTag && m.rev !== cloudRev && !temPendente()) { cloudRev = m.rev; pullCloud(m).then(() => toast('Dados atualizados de outro aparelho')); }
     }, e => setSync('err', e));
-  } catch (e) { setSync('err', e); }
+  } catch (e) { if (!navigator.onLine) semInternet(); else setSync('err', e); }
 }
+/* Sem internet: segue salvando no aparelho e envia quando a conexão voltar */
+let avisouOffline = false;
+function semInternet() {
+  setSync('offline');
+  if (!avisouOffline) { avisouOffline = true; toast('Sem internet: os dados ficam no aparelho e vão para a nuvem quando a conexão voltar'); }
+}
+window.addEventListener('online', () => {
+  avisouOffline = false;
+  if (!cloud) return;
+  if (!stopWatch) conectarBackend(cloud); // não chegou a conectar ao abrir o app
+  else if (temPendente()) scheduleSync();
+});
 function desconectarBackend() {
   if (stopWatch) { try { stopWatch(); } catch (e) { /* já encerrado */ } }
   stopWatch = null; cloud = null; clearTimeout(syncTimer); syncState = 'local';
@@ -440,7 +465,16 @@ function loadScript(src, global) {
 async function iniciarSupabase() {
   authGate = true; authMsg = 'Conectando…'; render();
   try { await loadScript(SUPABASE_JS, 'supabase'); }
-  catch (e) { authMsg = 'Sem conexão com o servidor. Verifique a internet ou use sem conta (dados só neste aparelho).'; render(); return; }
+  catch (e) {
+    // Sem internet e sem a biblioteca no aparelho: abre com os dados locais da última conta usada e reconecta quando a internet voltar
+    const u = usuarioGuardado();
+    if (u) {
+      sbUser = u; KEY_LOCAL = KEY + ':' + u.id; db = load(); migrate(db); authGate = false; view = 'home'; render();
+      semInternet(); window.addEventListener('online', () => location.reload(), { once: true });
+      return;
+    }
+    authMsg = 'Sem conexão com o servidor. Verifique a internet ou use sem conta (dados só neste aparelho).'; render(); return;
+  }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   sb.auth.onAuthStateChange((ev, session) => {
     // Não chamar o Supabase dentro deste callback: agenda para depois
@@ -453,6 +487,14 @@ async function iniciarSupabase() {
   const { data } = await sb.auth.getSession();
   if (data && data.session) entrar(data.session.user);
   else { authMsg = ''; if (recuperando) authModo = 'novaSenha'; render(); }
+}
+function usuarioGuardado() {
+  try {
+    const ref = new URL(SUPABASE_URL).hostname.split('.')[0];
+    const j = JSON.parse(localStorage.getItem('sb-' + ref + '-auth-token') || 'null');
+    const u = j && (j.user || (j.currentSession && j.currentSession.user));
+    return u && u.id ? u : null;
+  } catch (e) { return null; }
 }
 function entrar(user) {
   if (sbUser && sbUser.id === user.id) return;
@@ -530,8 +572,17 @@ document.addEventListener('submit', async e => {
     }
   } catch (err) { authMsg = traduzErro(err); render(); }
 });
+/* App instalável (PWA): service worker para funcionar offline e botão "Instalar" no Android */
+let pedidoInstalar = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pedidoInstalar = e; });
+window.addEventListener('appinstalled', () => { pedidoInstalar = null; toast('Canaril instalado'); });
+const instalado = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function registrarSW() {
+  if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => { /* segue sem modo offline */ });
+}
 function iniciar() {
   if (window.claude && window.claude.use) { render(); initClaude(); return; }
+  registrarSW();
   if (temSupabase() && !semConta()) { iniciarSupabase(); return; }
   render();
 }
@@ -2030,6 +2081,9 @@ function sDados() {
         <button class="btn pri full" data-act="xls">⬇️ Excel .xlsx (todas as tabelas + indicadores)</button>
         <p class="mu" style="margin:10px 0 6px">CSV por tabela (abre no Excel / Google Planilhas):</p>
         <div class="acts">${Object.entries(EXP).map(([k, e]) => `<button class="btn sm" data-act="csv" data-id="${k}">${e.n}</button>`).join('')}</div></div>
+      ${!(window.claude && window.claude.use) && !instalado() ? `<div class="card"><h3 style="margin-top:0">Instalar no celular</h3>
+        ${pedidoInstalar ? '<p class="mu" style="margin-bottom:8px">Instale o Canaril para abrir pelo ícone, em tela cheia, mesmo sem internet.</p><div class="acts"><button class="btn pri" data-act="instalar">📲 Instalar app</button></div>'
+          : `<p class="mu">${/iphone|ipad/i.test(navigator.userAgent) ? 'No iPhone: abra no Safari, toque em <b>Compartilhar</b> → <b>Adicionar à Tela de Início</b>.' : 'No Android: no Chrome, toque em <b>⋮</b> → <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>).'}</p>`}</div>` : ''}
       ${temSupabase() ? `<div class="card"><h3 style="margin-top:0">Conta</h3>
         ${sbUser ? `<p class="mu" style="margin-bottom:8px">Conectado como <b>${esc(sbUser.email || '')}</b>. Seus dados ficam salvos na sua conta e aparecem em qualquer aparelho em que você entrar.</p><div class="acts"><button class="btn" data-act="sair">Sair da conta</button></div>`
           : '<p class="mu" style="margin-bottom:8px">Você está usando sem conta: os dados ficam só neste aparelho. Entre ou crie uma conta para salvar na nuvem e usar em vários aparelhos.</p><div class="acts"><button class="btn pri" data-act="comConta">Entrar ou criar conta</button></div>'}</div>` : ''}
@@ -2227,6 +2281,7 @@ const ACT = {
   close: () => { stack.length = 0; paint(); },
   fdel: () => { const top = stack[stack.length - 1]; if (top.del) top.del(); },
   menu: () => showSheet(sDados()),
+  instalar: async () => { if (!pedidoInstalar) return; pedidoInstalar.prompt(); try { await pedidoInstalar.userChoice; } catch (e) { /* cancelado */ } pedidoInstalar = null; refresh(); },
   auModo: m => { authModo = m; authMsg = ''; render(); },
   semConta: () => { setSemConta(true); authGate = false; KEY_LOCAL = KEY; db = load(); migrate(db); view = 'home'; render(); toast('Usando sem conta: os dados ficam só neste aparelho'); },
   comConta: () => { setSemConta(false); stack.length = 0; paint(); if (sb) { authGate = true; authModo = 'entrar'; authMsg = ''; render(); } else iniciarSupabase(); },
