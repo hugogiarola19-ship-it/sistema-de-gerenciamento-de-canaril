@@ -213,7 +213,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27e'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.10.27f'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -334,7 +334,15 @@ function setSync(st, err) {
   syncState = st;
   const el = $('#sync');
   el.textContent = st === 'saving' ? '☁️ salvando…' : '';
-  if (st === 'err' && err) toast(err.code === 'quota_exceeded' ? 'Espaço na nuvem esgotado. Exporte um backup.' : 'Falha ao salvar na nuvem; os dados seguem neste aparelho.');
+  if (st === 'err' && err) toast(motivoFalha(err));
+}
+/* Explica a falha de gravação na nuvem com o motivo, para facilitar o diagnóstico */
+function motivoFalha(e) {
+  const m = String((e && (e.message || e.code)) || '');
+  if (e && e.code === 'quota_exceeded') return 'Espaço na nuvem esgotado. Exporte um backup.';
+  if (/canaril_docs/i.test(m) && /does not exist|schema cache|not find/i.test(m)) return 'Falha ao salvar: a tabela canaril_docs não existe no Supabase. Rode o SQL de supabase/schema.sql. Os dados seguem neste aparelho.';
+  if (/jwt|token|expired|401/i.test(m)) return 'Falha ao salvar: sua sessão expirou. Saia e entre de novo pelo menu ☰. Os dados seguem neste aparelho.';
+  return 'Falha ao salvar na nuvem (' + (m.slice(0, 120) || 'erro desconhecido') + '). Os dados seguem neste aparelho.';
 }
 function claudeBackend(d, base) {
   return {
@@ -348,7 +356,7 @@ function claudeBackend(d, base) {
 }
 function supabaseBackend(client, userId) {
   const T = 'canaril_docs';
-  const chk = r => { if (r.error) throw { code: r.error.code === '42501' ? 'invalid_argument' : 'unavailable', message: r.error.message }; return r; };
+  const chk = r => { if (r.error) throw { code: r.error.code === '42501' ? 'invalid_argument' : 'unavailable', message: [r.error.code, r.error.message].filter(Boolean).join(': ') }; return r; };
   return {
     name: 'supabase',
     async get(k) { const r = chk(await client.from(T).select('dados').eq('chave', k).maybeSingle()); return r.data ? r.data.dados : null; },
