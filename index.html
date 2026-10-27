@@ -46,7 +46,9 @@
 
   .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 8px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--ac); color: var(--ac-tx); }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ac); }
-  .top h1 { font-size: 18px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top h1 { font-size: 18px; flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .top h1 .marca { flex: none; }
+  .top h1 .criatorio { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 500; font-size: 15px; padding-left: 8px; border-left: 1.5px solid rgba(0,0,0,.35); }
   .top h1[data-act] { cursor: pointer; }
   .top button { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
   .top button:active { background: rgba(0,0,0,.08); }
@@ -211,7 +213,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27d'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.10.27e'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -843,10 +845,12 @@ const F = {
   home: { q: '' }
 };
 
-/* Cabeçalho: nome do criatório do usuário (ou "Canaril"); toque abre o perfil */
+/* Cabeçalho: marca "Canaril" fixa e, ao lado, o nome do criatório do usuário; toque abre o perfil */
 function titulo() {
-  const h = $('#titulo'), nome = (!authGate && (db.perfil.criatorio || db.perfil.nome)) || 'Canaril';
-  h.textContent = '🐤 ' + nome;
+  const h = $('#titulo');
+  // "Canaril Canto e Mel" vira só "Canto e Mel" ao lado da marca, para não repetir
+  const nome = authGate ? '' : String(db.perfil.criatorio || db.perfil.nome || '').replace(/^\s*canaril\b[\s\-–·|:]*/i, '').trim();
+  h.innerHTML = '<span class="marca">🐤 Canaril</span>' + (nome ? `<span class="criatorio">${esc(nome)}</span>` : '');
   if (authGate) { h.removeAttribute('data-act'); h.removeAttribute('title'); } else { h.dataset.act = 'perfil'; h.title = 'Meu perfil'; }
 }
 function render() {
