@@ -87,6 +87,12 @@
   .li b { font-variant-numeric: tabular-nums; }
   .li .r { text-align: right; flex-shrink: 0; }
   .sx { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; flex-shrink: 0; }
+  .gp { flex: none; min-width: 58px; max-width: 92px; padding: 5px 6px; border-radius: 10px; background: var(--ac); color: var(--ac-tx); text-align: center; line-height: 1.05; align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .gp small { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+  .gp b { display: block; font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .gp.longo b { font-size: 15px; }
+  .li > .btn, .li > .bdg, .li > .r { align-self: center; }
+  .gp.vazio { background: var(--bd); color: var(--mu); }
   .sx-M { background: var(--info-soft); color: var(--info); }
   .sx-F { background: var(--bad-soft); color: var(--bad); }
   .sx-I { background: var(--bd); color: var(--mu); }
@@ -204,7 +210,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27b'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.10.27c'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -827,9 +833,9 @@ let view = 'home', curList = null;
 const sub = { repro: 'posturas', manejo: 'hist', torneios: 'eventos' };
 const F = {
   aves: { q: '', sit: 'ativos', sexo: '', cor: '', raca: '', temp: '', casal: '', esp: '' },
-  post: { temp: '', casal: '', st: 'ativa' },
+  post: { temp: '', casal: '', st: 'ativa', ord: 'gaiola' },
   fil: { temp: '', casal: '', st: '' },
-  casais: { st: 'ativos' },
+  casais: { st: 'ativos', ord: 'gaiola' },
   man: { q: '', tipo: '' },
   rel: { temp: '', esp: '' },
   ev: { st: 'proximos' },
@@ -958,7 +964,7 @@ VIEWS.repro = () => {
   const head = subtabs('repro', [['posturas', '🥚 Posturas'], ['casais', '💑 Casais'], ['filhotes', '🐣 Filhotes']]);
   if (sub.repro === 'casais') {
     curList = casaisList;
-    return head + `<div class="filters">${sel('casais.st', [['ativos', 'Casais ativos'], ['separados', 'Separados'], ['', 'Todos']], F.casais.st, 'Situação do casal')}</div>
+    return head + `<div class="filters">${sel('casais.st', [['ativos', 'Casais ativos'], ['separados', 'Separados'], ['', 'Todos']], F.casais.st, 'Situação do casal')}${sel('casais.ord', [['gaiola', 'Ordem: gaiola'], ['recentes', 'Ordem: mais recentes'], ['macho', 'Ordem: anilha do macho'], ['fertilidade', 'Ordem: maior fertilidade'], ['filhotes', 'Ordem: mais filhotes']], F.casais.ord, 'Ordenar casais')}</div>
       <div id="list"></div><button class="btn pri full" data-act="novoCasal">＋ Novo casal</button>`;
   }
   if (sub.repro === 'filhotes') {
@@ -973,6 +979,7 @@ VIEWS.repro = () => {
   curList = posturasList;
   const f = F.post;
   return head + `<div class="filters">
+      ${sel('post.ord', [['gaiola', 'Ordem: gaiola'], ['eclosao', 'Ordem: eclosão mais próxima'], ['recentes', 'Ordem: mais recentes'], ['casal', 'Ordem: casal']], f.ord, 'Ordenar posturas')}
       ${sel('post.st', [['ativa', 'Em andamento'], ['encerrada', 'Encerradas'], ['', 'Todas']], f.st, 'Status')}
       ${sel('post.temp', optTemps('Todas as temporadas'), f.temp, 'Temporada')}
       ${sel('post.casal', optCasais('Todos os casais'), f.casal, 'Casal')}
@@ -981,10 +988,28 @@ VIEWS.repro = () => {
     <div id="list"></div>
     <button class="btn pri full" data-act="novaPostura">＋ Nova postura</button>`;
 };
+/* Gaiola/viveiro em destaque: "Gaiola 07" vira rótulo "Gaiola" + código grande "07"; nomes longos aparecem inteiros */
+function gaiolaPartes(v) {
+  const t = String(v || '').trim();
+  const m = t.match(/^(gaiola|viveiro|box|g)\.?\s*([\w\-\/]{1,5})$/i);
+  if (m) return { rot: m[1].toLowerCase() === 'g' ? 'Gaiola' : cap(m[1].toLowerCase()), num: m[2] };
+  return { rot: t.length <= 5 ? 'Gaiola' : 'Local', num: t };
+}
+function gaiolaPill(v) {
+  if (!v) return '<div class="gp vazio"><small>Gaiola</small><b>—</b></div>';
+  const { rot, num } = gaiolaPartes(v);
+  return `<div class="gp${num.length > 5 ? ' longo' : ''}"><small>${esc(rot)}</small><b>${esc(num)}</b></div>`;
+}
+const porGaiola = (a, b) => (!a) - (!b) || gaiolaPartes(a).num.localeCompare(gaiolaPartes(b).num, 'pt-BR', { numeric: true, sensitivity: 'base' }) || String(a || '').localeCompare(String(b || ''), 'pt-BR');
 function posturasList() {
   const f = F.post;
-  const r = db.posturas.filter(p => (!f.st || p.status === f.st) && (!f.temp || temporada(p.dataInicio) === f.temp) && (!f.casal || p.casalId === f.casal))
-    .sort((a, b) => b.dataInicio.localeCompare(a.dataInicio));
+  const ord = {
+    gaiola: (a, b) => porGaiola(casal(a.casalId)?.viveiro, casal(b.casalId)?.viveiro) || b.dataInicio.localeCompare(a.dataInicio),
+    eclosao: (a, b) => { const k = p => ovosDe(p.id).length && !ovosDe(p.id).some(o => nasceu(o.status)) ? previsao(p) : '9999'; return k(a).localeCompare(k(b)) || porGaiola(casal(a.casalId)?.viveiro, casal(b.casalId)?.viveiro); },
+    recentes: (a, b) => b.dataInicio.localeCompare(a.dataInicio),
+    casal: (a, b) => casalNome(casal(a.casalId)).localeCompare(casalNome(casal(b.casalId)), 'pt-BR', { numeric: true })
+  }[f.ord] || ((a, b) => b.dataInicio.localeCompare(a.dataInicio));
+  const r = db.posturas.filter(p => (!f.st || p.status === f.st) && (!f.temp || temporada(p.dataInicio) === f.temp) && (!f.casal || p.casalId === f.casal)).sort(ord);
   return r.length ? r.map(p => postCard(p)).join('') : '<div class="empty">Nenhuma postura com esses filtros.</div>';
 }
 function postBadge(p) {
@@ -1005,8 +1030,9 @@ function postCard(p, inSheet) {
   const sa = fil.filter(a => isSA(a.anilha) && ativa(a));
   const ativaP = p.status === 'ativa';
   return `<div class="card">
-    <div class="row"><b class="grow">${esc(casalNome(c))}</b>${postBadge(p)}</div>
-    <div class="mu">${multiEsp() ? esc(espPostura(p).nome) + ' · ' : ''}${esc(c?.viveiro || '')} · início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div>
+    <div class="row" style="align-items:stretch">${gaiolaPill(c?.viveiro)}
+      <div class="grow"><div class="row" style="align-items:flex-start"><b class="grow">${esc(casalNome(c))}</b>${postBadge(p)}</div>
+      <div class="mu">${multiEsp() ? esc(espPostura(p).nome) + ' · ' : ''}início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div></div></div>
     <div class="eggs">${ov.map(o => `<button class="egg e-${o.status}" data-act="ovo" data-id="${o.id}" aria-label="Ovo ${o.ordem}: ${OVO[o.status]}">${o.status === 'eclodido' ? '🐣' : o.status === 'mortoNinho' ? '†' : o.ordem}</button>`).join('')}
       ${ativaP ? `<button class="egg add" data-act="addOvo" data-id="${p.id}" aria-label="Registrar ovo hoje">＋</button>` : ''}</div>
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
@@ -1024,15 +1050,22 @@ function postCard(p, inSheet) {
     </div></div>`;
 }
 function casaisList() {
-  const st = F.casais.st;
+  const st = F.casais.st, fert = c => { const s = stats({ casalId: c.id }); return s.ovos ? s.fert / s.ovos : -1; };
+  const ord = {
+    gaiola: (a, b) => porGaiola(a.viveiro, b.viveiro),
+    recentes: (a, b) => b.dataFormacao.localeCompare(a.dataFormacao),
+    macho: (a, b) => a.macho.localeCompare(b.macho, 'pt-BR', { numeric: true }),
+    fertilidade: (a, b) => fert(b) - fert(a),
+    filhotes: (a, b) => stats({ casalId: b.id }).fil - stats({ casalId: a.id }).fil
+  }[F.casais.ord] || ((a, b) => porGaiola(a.viveiro, b.viveiro));
   const r = db.casais.filter(c => !st || (st === 'ativos' ? casalAtivo(c) : !casalAtivo(c)))
-    .sort((a, b) => (casalAtivo(b) - casalAtivo(a)) || b.dataFormacao.localeCompare(a.dataFormacao));
+    .sort((a, b) => (casalAtivo(b) - casalAtivo(a)) || ord(a, b));
   return r.length ? r.map(c => {
     const s = stats({ casalId: c.id });
-    return `<div class="li" data-act="casal" data-id="${c.id}"><div class="sx sx-I">💑</div>
-      <div class="grow"><b>${esc(casalNome(c))}</b><div class="mu">${esc(c.viveiro || '—')} · desde ${fmt(c.dataFormacao)}${c.dataSeparacao ? ' até ' + fmt(c.dataSeparacao) : ''}</div>
+    return `<div class="li" data-act="casal" data-id="${c.id}" style="align-items:stretch">${gaiolaPill(c.viveiro)}
+      <div class="grow"><b>${esc(casalNome(c))}</b><div class="mu">Desde ${fmt(c.dataFormacao)}${c.dataSeparacao ? ' até ' + fmt(c.dataSeparacao) : ''}</div>
       <div class="mu">${s.posturas} postura(s) · ${s.ovos} ovos · ${s.fil} filhotes · fert. ${s.txFert}</div></div>
-      ${casalAtivo(c) ? '<span class="bdg b-ok">Ativo</span>' : '<span class="bdg">Separado</span>'}</div>`;
+      <div style="align-self:center">${casalAtivo(c) ? '<span class="bdg b-ok">Ativo</span>' : '<span class="bdg">Separado</span>'}</div></div>`;
   }).join('') : '<div class="empty">Nenhum casal.</div>';
 }
 function filhotesList() {
@@ -1611,12 +1644,12 @@ function formNasc(pid) {
 function sPick(kind) {
   return {
     html: () => {
-      const ps = db.posturas.filter(p => p.status === 'ativa' && (kind === 'addOvo' || ovosDe(p.id).length));
-      const semP = db.casais.filter(c => casalAtivo(c) && !db.posturas.some(p => p.status === 'ativa' && p.casalId === c.id));
+      const ps = db.posturas.filter(p => p.status === 'ativa' && (kind === 'addOvo' || ovosDe(p.id).length)).sort((a, b) => porGaiola(casal(a.casalId)?.viveiro, casal(b.casalId)?.viveiro));
+      const semP = db.casais.filter(c => casalAtivo(c) && !db.posturas.some(p => p.status === 'ativa' && p.casalId === c.id)).sort((a, b) => porGaiola(a.viveiro, b.viveiro));
       return `<h2>${kind === 'addOvo' ? '🥚 Registrar ovo de hoje' : '🐣 Registrar nascimento'}</h2>
         <p class="mu" style="margin-bottom:8px">Toque no casal.</p>
-        ${ps.map(p => { const ov = ovosDe(p.id); return `<div class="li" data-act="${kind === 'nasc' ? 'pickNasc' : kind}" data-id="${p.id}"><div class="sx sx-I">${kind === 'addOvo' ? '🥚' : '🐣'}</div><div class="grow"><b>${esc(casalNome(casal(p.casalId)))}</b><div class="mu">${esc(casal(p.casalId)?.viveiro || '')} · ${ov.length} ovo(s) · início ${fmt(p.dataInicio)}</div></div><span class="btn sm pri">${kind === 'addOvo' ? '＋ Ovo' : 'Registrar'}</span></div>`; }).join('') || '<div class="card mu">Nenhuma postura em andamento.</div>'}
-        ${kind === 'addOvo' && semP.length ? `<h3>Casais ativos sem postura — iniciar postura com 1 ovo hoje</h3>${semP.map(c => `<div class="li" data-act="iniciarPost" data-id="${c.id}"><div class="sx sx-I">💑</div><div class="grow"><b>${esc(casalNome(c))}</b><div class="mu">${esc(c.viveiro || '')}</div></div><span class="btn sm">Iniciar</span></div>`).join('')}` : ''}`;
+        ${ps.map(p => { const ov = ovosDe(p.id); return `<div class="li" data-act="${kind === 'nasc' ? 'pickNasc' : kind}" data-id="${p.id}" style="align-items:stretch">${gaiolaPill(casal(p.casalId)?.viveiro)}<div class="grow" style="align-self:center"><b>${esc(casalNome(casal(p.casalId)))}</b><div class="mu">${ov.length} ovo(s) · início ${fmt(p.dataInicio)}</div></div><span class="btn sm pri">${kind === 'addOvo' ? '＋ Ovo' : 'Registrar'}</span></div>`; }).join('') || '<div class="card mu">Nenhuma postura em andamento.</div>'}
+        ${kind === 'addOvo' && semP.length ? `<h3>Casais ativos sem postura — iniciar postura com 1 ovo hoje</h3>${semP.map(c => `<div class="li" data-act="iniciarPost" data-id="${c.id}" style="align-items:stretch">${gaiolaPill(c.viveiro)}<div class="grow" style="align-self:center"><b>${esc(casalNome(c))}</b></div><span class="btn sm">Iniciar</span></div>`).join('')}` : ''}`;
     }
   };
 }
