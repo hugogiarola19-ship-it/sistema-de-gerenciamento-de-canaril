@@ -224,6 +224,7 @@ const ESPECIES_PADRAO = [
   { id: 'esp-mandarim', nome: 'Diamante-mandarim', diasEclosao: 13, diaAnilhamento: 7, maturidadeDias: 90, diametroAnilha: '', obs: '' },
   { id: 'esp-gould', nome: 'Diamante-de-gould', diasEclosao: 15, diaAnilhamento: 8, maturidadeDias: 120, diametroAnilha: '', obs: '' }
 ];
+const RACAS_SUGERIDAS = ['Canário de cor', 'Timbrado espanhol', 'Harzer roller', 'Malinois (Waterslager)', 'Gloster', 'Border', 'Fife fancy', 'Norwich', 'Yorkshire', 'Lizard', 'Raza española', 'Bossu belga', 'Frisado parisiense', 'Frisado do norte', 'Frisado do sul', 'Arlequim português', 'Lancashire', 'Crested', 'SRD (sem raça definida)'];
 const TIPO_EVENTO = { exposicao: 'Exposição (julgamento de plumagem)', canto: 'Concurso de canto', outro: 'Outro' };
 const CHECKLIST_PADRAO = ['Separar as aves candidatas', 'Fazer a inscrição e pagar a taxa', 'Adaptar as aves à gaiola de exposição', 'Banho nas aves (3 a 5 dias antes)', 'Conferir anilhas e documentos', 'Preparar transporte, comida e água'];
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -821,7 +822,7 @@ function alertas() {
 let view = 'home', curList = null;
 const sub = { repro: 'posturas', manejo: 'hist', torneios: 'eventos' };
 const F = {
-  aves: { q: '', sit: 'ativos', sexo: '', cor: '', temp: '', casal: '', esp: '' },
+  aves: { q: '', sit: 'ativos', sexo: '', cor: '', raca: '', temp: '', casal: '', esp: '' },
   post: { temp: '', casal: '', st: 'ativa' },
   fil: { temp: '', casal: '', st: '' },
   casais: { st: 'ativos' },
@@ -852,7 +853,7 @@ function bdgSit(s) { return `<span class="bdg ${SIT_BDG[s] || ''}">${esc(cap(s))
 function aveLi(a, extra = '') {
   return `<div class="li" data-act="ave" data-id="${a.id}">
     <div class="sx sx-${a.sexo}" aria-label="${SEXO[a.sexo]}">${SEXO_IC[a.sexo]}</div>
-    <div class="grow"><b>${esc(a.anilha)}</b><div class="mu">${esc([multiEsp() ? espAve(a).nome : '', a.cor, a.mutacao, a.linhagem].filter(Boolean).join(' · ') || '—')}${extra}</div></div>
+    <div class="grow"><b>${esc(a.anilha)}</b><div class="mu">${esc([multiEsp() ? espAve(a).nome : '', a.raca, a.cor, a.mutacao, a.linhagem].filter(Boolean).join(' · ') || '—')}${extra}</div></div>
     <div class="r">${bdgSit(a.situacao)}<div class="mu">${esc(a.local || '')}</div></div></div>`;
 }
 
@@ -929,6 +930,7 @@ VIEWS.aves = () => {
       ${multiEsp() ? sel('aves.esp', [['', 'Todas as espécies'], ...optEspecies()], f.esp, 'Espécie') : ''}
       ${sel('aves.sit', [['ativos', 'Ativas'], ['', 'Todas as situações'], ...SIT.map(s => [s, cap(s)])], f.sit, 'Situação')}
       ${sel('aves.sexo', [['', 'Sexo'], ['M', 'Machos'], ['F', 'Fêmeas'], ['I', 'Indeterminados']], f.sexo, 'Sexo')}
+      ${uniq('raca').length ? sel('aves.raca', [['', 'Todas as raças'], ...uniq('raca').map(c => [c, c])], f.raca, 'Raça') : ''}
       ${sel('aves.cor', [['', 'Todas as cores'], ...uniq('cor').map(c => [c, c])], f.cor, 'Cor')}
       ${sel('aves.temp', optTemps('Nascidas em qualquer temporada'), f.temp, 'Temporada de nascimento')}
       ${sel('aves.casal', optCasais('Filhos de qualquer casal'), f.casal, 'Casal')}
@@ -941,7 +943,7 @@ function avesList() {
   const r = db.aves.filter(a =>
     (!q || norm(a.anilha).includes(q) || norm(a.anilhaOriginal).includes(q)) &&
     (f.sit === '' || (f.sit === 'ativos' ? ativa(a) : a.situacao === f.sit)) &&
-    (!f.sexo || a.sexo === f.sexo) && (!f.cor || a.cor === f.cor) && (!f.esp || a.especieId === f.esp) &&
+    (!f.sexo || a.sexo === f.sexo) && (!f.cor || a.cor === f.cor) && (!f.raca || a.raca === f.raca) && (!f.esp || a.especieId === f.esp) &&
     (!f.temp || (a.origem === 'nascido' && temporada(a.dataNascimento) === f.temp)) &&
     (!f.casal || filCasal(a) === f.casal)
   ).sort((a, b) => a.anilha.localeCompare(b.anilha, 'pt-BR', { numeric: true }));
@@ -1177,6 +1179,7 @@ function applyShow(ent) {
 }
 function datalists() {
   return ['cor', 'mutacao', 'linhagem', 'local', 'vendedor'].map(k => `<datalist id="dl_${k}">${uniq(k).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('') +
+    `<datalist id="dl_raca">${[...new Set([...uniq('raca'), ...RACAS_SUGERIDAS])].map(v => `<option value="${esc(v)}">`).join('')}</datalist>` +
     `<datalist id="dl_anilha">${db.aves.filter(ativa).map(a => `<option value="${esc(a.anilha)}">`).join('')}</datalist>` +
     ['classe', 'juiz', 'premio'].map(k => `<datalist id="dl_${k}">${[...new Set(db.inscricoes.map(i => i[k]).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('') +
     `<datalist id="dl_federacao">${[...new Set(['FOB', ...db.clubes.map(c => c.federacao).filter(Boolean)])].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
@@ -1220,6 +1223,7 @@ function formAve(a, preset = {}) {
     fields: [
       { k: 'anilha', l: 'Anilha (numeração)', req: 1, ph: 'Ex.: HG 26 001' },
       { k: 'especieId', l: 'Espécie', t: 'select', o: optEspecies },
+      { k: 'raca', l: 'Raça', list: 'raca', ph: 'Ex.: Timbrado espanhol, Gloster, SRD' },
       { k: 'clubeId', l: 'Clube da anilha', t: 'select', o: () => [['', '— pelo lote de anilhas / nenhum —'], ...db.clubes.map(c => [c.id, c.nome])], show: () => db.clubes.length > 0 },
       { k: 'origem', l: 'Origem', t: 'seg', o: [['comprado', 'Comprado'], ['nascido', 'Nascido no plantel']] },
       { k: 'vendedor', l: 'Vendedor / criadouro', list: 'vendedor', show: comp },
@@ -1278,7 +1282,8 @@ function sAve(id) {
         <div class="card" style="margin-top:10px"><div class="grid2">
           ${I('Espécie', esc(espAve(a).nome))}${I('Clube da anilha', esc(clubeDaAve(a)?.nome || '—'))}
           ${I('Sexo', SEXO[a.sexo])}${I('Local', esc(a.local || '—'))}
-          ${I('Cor', esc(a.cor || '—'))}${I('Mutação', esc(a.mutacao || '—'))}
+          ${I('Raça', esc(a.raca || '—'))}${I('Cor', esc(a.cor || '—'))}
+          ${I('Mutação', esc(a.mutacao || '—'))}
           ${I('Linhagem', esc(a.linhagem || '—'))}${I('Origem', a.origem === 'nascido' ? 'Nascido no plantel' : 'Comprado')}
           ${a.origem === 'comprado' ? I('Vendedor', esc(a.vendedor || '—')) + I('Aquisição', fmt(a.dataAquisicao)) + I('Valor pago', a.valorPago !== '' && a.valorPago != null ? brl(a.valorPago) : '—') + I('Anilha original', esc(a.anilhaOriginal || '—')) : ''}
           ${a.origem === 'nascido' ? I('Nascimento', fmt(a.dataNascimento) + (a.dataNascimento && ativa(a) ? ` <span class="mu">(${idade(a.dataNascimento)})</span>` : '')) + I('Temporada', temporada(a.dataNascimento) || '—') + I('Pai', lk(a.pai)) + I('Mãe', lk(a.mae)) : ''}
@@ -1540,6 +1545,7 @@ function criarFilhotes(p, n, data, anilhas, cor, semOvos) {
     const an = anilhas[i] || nextSA();
     db.aves.push({ id: uid(), anilha: an, origem: 'nascido', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '',
       dataNascimento: data, pai: c?.macho || '', mae: c?.femea || '', posturaId: p.id, sexo: 'I', cor: cor || '', mutacao: '',
+      raca: pai?.raca && mae?.raca && pai.raca !== mae.raca ? '' : (pai?.raca || mae?.raca || ''),
       linhagem: pai?.linhagem || mae?.linhagem || '', situacao: 'ativo', local: c?.viveiro || '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '',
       especieId: (mae || pai)?.especieId || db.cfg.especiePadrao, clubeId: '' });
     if (anilhas[i]) db.manejos.push({ id: uid(), anilha: an, local: '', data: today(), tipo: 'anilhamento', peso: '', produto: '', dose: '', obs: 'Anilhado no registro do nascimento' });
@@ -1991,7 +1997,7 @@ function formEsp(e) {
    Dados: exportação, backup, configurações e ajuda
    ============================================================ */
 const EXP = {
-  aves: { n: 'Aves', rows: () => db.aves, cols: [['Anilha', 'anilha'], ['Espécie', a => espAve(a).nome], ['Clube', a => clubeDaAve(a)?.nome || ''], ['Origem', a => a.origem === 'nascido' ? 'Nascido' : 'Comprado'], ['Sexo', a => SEXO[a.sexo]], ['Cor', 'cor'], ['Mutação', 'mutacao'], ['Linhagem', 'linhagem'], ['Situação', 'situacao'], ['Local', 'local'],
+  aves: { n: 'Aves', rows: () => db.aves, cols: [['Anilha', 'anilha'], ['Espécie', a => espAve(a).nome], ['Clube', a => clubeDaAve(a)?.nome || ''], ['Origem', a => a.origem === 'nascido' ? 'Nascido' : 'Comprado'], ['Sexo', a => SEXO[a.sexo]], ['Raça', 'raca'], ['Cor', 'cor'], ['Mutação', 'mutacao'], ['Linhagem', 'linhagem'], ['Situação', 'situacao'], ['Local', 'local'],
     ['Vendedor', 'vendedor'], ['Data aquisição', a => fmt(a.dataAquisicao)], ['Valor pago', 'valorPago'], ['Anilha original', 'anilhaOriginal'], ['Nascimento', a => a.dataNascimento ? fmt(a.dataNascimento) : ''], ['Pai', 'pai'], ['Mãe', 'mae'],
     ['Data saída', a => a.dataSaida ? fmt(a.dataSaida) : ''], ['Motivo/destino', 'motivoSaida'], ['Valor venda', 'valorVenda'], ['Observações', 'obs']] },
   casais: { n: 'Casais', rows: () => db.casais, cols: [['Macho', 'macho'], ['Fêmea', 'femea'], ['Viveiro', 'viveiro'], ['Formação', c => fmt(c.dataFormacao)], ['Separação', c => c.dataSeparacao ? fmt(c.dataSeparacao) : ''], ['Linhagem', linCasal], ['Posturas', c => stats({ casalId: c.id }).posturas], ['Filhotes', c => stats({ casalId: c.id }).fil], ['Observações', 'obs']] },
@@ -2157,7 +2163,7 @@ function seedNow() {
   const cfg = { ...db.cfg, ultimoBackup: T };
   const perfil = db.perfil || {};
   db = blank(); db.cfg = cfg; db.perfil = perfil; migrate(db);
-  const base = { especieId: 'esp-canario', clubeId: '', origem: 'comprado', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '', dataNascimento: '', pai: '', mae: '', posturaId: '', sexo: 'I', cor: '', mutacao: '', linhagem: '', situacao: 'ativo', local: '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' };
+  const base = { especieId: 'esp-canario', raca: 'Canário de cor', clubeId: '', origem: 'comprado', vendedor: '', dataAquisicao: '', valorPago: '', anilhaOriginal: '', dataNascimento: '', pai: '', mae: '', posturaId: '', sexo: 'I', cor: '', mutacao: '', linhagem: '', situacao: 'ativo', local: '', obs: '', dataSaida: '', motivoSaida: '', valorVenda: '' };
   const A = o => { const a = { id: uid(), ...base, ...o }; db.aves.push(a); return a; };
   [
     ['CD 23 017', 'M', 'Amarelo', 'Lipocromo intenso', 'Linha Ouro', 'Criadouro Canto Dourado', 820, 380, 'Gaiola 01'],
@@ -2182,8 +2188,8 @@ function seedNow() {
         c5 = C('CD 24 061', 'RB 25 044', 'Gaiola 06', -85), c6 = C('RB 24 203', 'RB 24 230', 'Gaiola 03', -85);
   c6.obs = 'Macho RB 24 203 alterna entre as gaiolas 02 e 03';
   // Periquitos (segunda espécie)
-  A({ anilha: 'PQ 24 010', especieId: 'esp-periquito', sexo: 'M', cor: 'Verde-claro', mutacao: 'Normal', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 120, anilhaOriginal: 'PQ 24 010', situacao: 'reprodutor', local: 'Gaiola 08' });
-  A({ anilha: 'PQ 24 022', especieId: 'esp-periquito', sexo: 'F', cor: 'Azul-cobalto', mutacao: 'Opalino', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 140, anilhaOriginal: 'PQ 24 022', situacao: 'reprodutor', local: 'Gaiola 08' });
+  A({ anilha: 'PQ 24 010', especieId: 'esp-periquito', raca: '', sexo: 'M', cor: 'Verde-claro', mutacao: 'Normal', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 120, anilhaOriginal: 'PQ 24 010', situacao: 'reprodutor', local: 'Gaiola 08' });
+  A({ anilha: 'PQ 24 022', especieId: 'esp-periquito', raca: '', sexo: 'F', cor: 'Azul-cobalto', mutacao: 'Opalino', linhagem: 'Linha Céu', vendedor: 'Aviário Céu Azul', dataAquisicao: D(-300), valorPago: 140, anilhaOriginal: 'PQ 24 022', situacao: 'reprodutor', local: 'Gaiola 08' });
   const c7 = C('PQ 24 010', 'PQ 24 022', 'Gaiola 08', -60);
 
   let n25 = 0, n26 = 0;
@@ -2197,7 +2203,7 @@ function seedNow() {
     const pai = ave(c.macho);
     (o.hatch?.f || []).forEach(f => {
       const loc = f.local || (start < -100 ? (f.sexo === 'F' ? 'Viveiro de voo 2' : 'Viveiro de voo 1') : start < -30 ? 'Viveiro de voo 3' : c.viveiro);
-      A({ origem: 'nascido', especieId: pai.especieId, dataNascimento: D(o.hatch.d), pai: c.macho, mae: c.femea, posturaId: p.id, cor: pai.cor, mutacao: pai.mutacao, linhagem: pai.linhagem, local: loc, ...f });
+      A({ origem: 'nascido', especieId: pai.especieId, dataNascimento: D(o.hatch.d), pai: c.macho, mae: c.femea, posturaId: p.id, raca: pai.raca, cor: pai.cor, mutacao: pai.mutacao, linhagem: pai.linhagem, local: loc, ...f });
       if (!isSA(f.anilha)) db.manejos.push({ id: uid(), anilha: f.anilha, local: '', data: D(o.hatch.d + 6), tipo: 'anilhamento', peso: '', produto: '', dose: '', obs: '' });
     });
     return p;
