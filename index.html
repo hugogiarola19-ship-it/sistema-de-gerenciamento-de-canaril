@@ -110,6 +110,7 @@
   .e-fertil { background: #d8efdf; border-color: var(--ok); color: #1c5a37; }
   .e-infertil { background: #fffbe8; border-color: #d8cf9c; border-style: dashed; color: #8a7d3b; }
   .e-eclodido { background: var(--ac); border-color: #c79f00; color: #1d1d1b; }
+  .e-mortoNinho { background: #4a3b33; border-color: #c79f00; color: #f2c200; }
   .e-quebrado { background: #fde7e5; border-color: var(--bad); color: var(--bad); text-decoration: line-through; }
   .e-perdido { background: #555; border-color: #333; color: #eee; }
   .egg.add { border-style: dashed; color: var(--mu); font-size: 20px; border-radius: 12px; }
@@ -203,15 +204,17 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.10.27b'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
 const SIT_BDG = { ativo: 'b-ok', reprodutor: 'b-ac', reservado: 'b-info', vendido: '', doado: '', morto: 'b-bad', descartado: '' };
 const SEXO = { M: 'Macho', F: 'Fêmea', I: 'Indeterminado' };
 const SEXO_IC = { M: '♂', F: '♀', I: '?' };
-const OVO = { pendente: 'Não verificado', fertil: 'Fértil', infertil: 'Infértil', eclodido: 'Eclodido', quebrado: 'Quebrado', perdido: 'Perdido' };
-const OVO_CURTO = { pendente: '?', fertil: 'Fértil', infertil: 'Claro', eclodido: 'Eclod.', quebrado: 'Quebr.', perdido: 'Perd.' };
+const OVO = { pendente: 'Não verificado', fertil: 'Fértil', infertil: 'Infértil', eclodido: 'Eclodido', mortoNinho: 'Morto no ninho', quebrado: 'Quebrado', perdido: 'Perdido' };
+const OVO_CURTO = { pendente: '?', fertil: 'Fértil', infertil: 'Claro', eclodido: 'Eclod.', mortoNinho: 'Morto ninho', quebrado: 'Quebr.', perdido: 'Perd.' };
+/* Ovo que chegou a nascer: eclodido ou nasceu e morreu no ninho (conta na eclosão e na mortalidade de filhotes) */
+const nasceu = st => st === 'eclodido' || st === 'mortoNinho';
 const MANEJO = { pesagem: 'Pesagem', vermifugacao: 'Vermifugação', tratamento: 'Tratamento', vitamina: 'Vitamina/suplemento', anilhamento: 'Anilhamento', veterinario: 'Obs. veterinária', limpeza: 'Limpeza', outro: 'Outro' };
 const MANEJO_IC = { pesagem: '⚖️', vermifugacao: '💊', tratamento: '💉', vitamina: '🧪', anilhamento: '💍', veterinario: '🩺', limpeza: '🧹', outro: '📝' };
 const MANEJO_POR_AVE = ['pesagem', 'vermifugacao', 'tratamento', 'vitamina', 'anilhamento', 'veterinario'];
@@ -717,7 +720,7 @@ function stats({ temp = '', casalId = '', linhagem = '', especieId = '' } = {}) 
   const ids = new Set(P.map(p => p.id));
   const O = db.ovos.filter(o => ids.has(o.posturaId));
   const n = s => O.filter(o => o.status === s).length;
-  const ecl = n('eclodido'), fert = n('fertil') + ecl;
+  const ecl = n('eclodido') + n('mortoNinho'), fert = n('fertil') + ecl;
   const Fil = db.aves.filter(a => {
     if (a.origem !== 'nascido') return false;
     if (temp && temporada(a.dataNascimento) !== temp) return false;
@@ -762,7 +765,7 @@ function alertas() {
   db.posturas.filter(p => p.status === 'ativa').forEach(p => {
     const ov = ovosDe(p.id); if (!ov.length) return;
     const nome = casalNome(casal(p.casalId));
-    if (!ov.some(o => o.status === 'eclodido')) {
+    if (!ov.some(o => nasceu(o.status))) {
       const prev = previsao(p), d = diff(t, prev);
       if (d < 0) L.push({ n: 5, c: 'bad', ic: '⚠️', tx: `Eclosão atrasada ${-d} dia(s)`, sub: `${nome} · prevista ${fmt(prev)}`, act: 'postura', id: p.id });
       else if (d === 0) L.push({ n: 4, c: 'warn', ic: '🐣', tx: 'Eclosão prevista para HOJE', sub: nome, act: 'postura', id: p.id });
@@ -987,7 +990,7 @@ function posturasList() {
 function postBadge(p) {
   const ov = ovosDe(p.id);
   if (p.status !== 'ativa') return '<span class="bdg">Encerrada</span>';
-  if (ov.some(o => o.status === 'eclodido')) return '<span class="bdg b-ac">🐣 Eclodiu</span>';
+  if (ov.some(o => nasceu(o.status))) return '<span class="bdg b-ac">🐣 Eclodiu</span>';
   if (!ov.length) return '<span class="bdg">Sem ovos</span>';
   const d = diff(today(), previsao(p));
   if (d < 0) return `<span class="bdg b-bad">Atrasada ${-d}d</span>`;
@@ -1004,7 +1007,7 @@ function postCard(p, inSheet) {
   return `<div class="card">
     <div class="row"><b class="grow">${esc(casalNome(c))}</b>${postBadge(p)}</div>
     <div class="mu">${multiEsp() ? esc(espPostura(p).nome) + ' · ' : ''}${esc(c?.viveiro || '')} · início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div>
-    <div class="eggs">${ov.map(o => `<button class="egg e-${o.status}" data-act="ovo" data-id="${o.id}" aria-label="Ovo ${o.ordem}: ${OVO[o.status]}">${o.status === 'eclodido' ? '🐣' : o.ordem}</button>`).join('')}
+    <div class="eggs">${ov.map(o => `<button class="egg e-${o.status}" data-act="ovo" data-id="${o.id}" aria-label="Ovo ${o.ordem}: ${OVO[o.status]}">${o.status === 'eclodido' ? '🐣' : o.status === 'mortoNinho' ? '†' : o.ordem}</button>`).join('')}
       ${ativaP ? `<button class="egg add" data-act="addOvo" data-id="${p.id}" aria-label="Registrar ovo hoje">＋</button>` : ''}</div>
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
     ${ov.length ? `<div class="mu">Último ovo ${fmt(ultimoOvo(p))} · eclosão prevista <b>${fmt(previsao(p))}</b></div>` : ''}
@@ -1442,19 +1445,43 @@ function sPostura(id) {
     }
   };
 }
+/* "Morto no ninho": nasceu e morreu antes de sair do ninho. Mantém um filhote (S/A) com situação "morto",
+   ligado ao ovo por filhoteId, para entrar na mortalidade de filhotes. */
+function dadosMortoNinho(ovo, p) {
+  const f = ovo.filhoteId && aveById(ovo.filhoteId), prev = previsao(p), t = today();
+  return { nascimento: f?.dataNascimento || (prev <= t ? prev : t), morte: f?.dataSaida || t, causa: f ? (f.motivoSaida || '').replace(/^Morreu no ninho:? ?/, '') : '' };
+}
+function registrarMortoNinho(ovo, p, { nascimento, morte, causa, antes }) {
+  let f = ovo.filhoteId && aveById(ovo.filhoteId);
+  if (!f && antes === 'eclodido') {
+    // O filhote já foi registrado no nascimento: usa um vivo dessa postura que ainda não esteja ligado a outro ovo
+    const ligados = new Set(db.ovos.map(x => x.filhoteId).filter(Boolean));
+    f = filhotesDe(p.id).filter(a => ativa(a) && !ligados.has(a.id)).sort((a, b) => isSA(b.anilha) - isSA(a.anilha))[0];
+  }
+  if (!f) { criarFilhotes(p, 1, nascimento || today(), [], '', true); f = db.aves[db.aves.length - 1]; }
+  Object.assign(f, { situacao: 'morto', dataNascimento: nascimento || f.dataNascimento, dataSaida: morte || today(), motivoSaida: 'Morreu no ninho' + (causa ? ': ' + causa : '') });
+  ovo.filhoteId = f.id;
+  toast(`† Registrado: ${f.anilha} morreu no ninho`);
+}
 function formOvo(id) {
   const o0 = db.ovos.find(o => o.id === id), p = postura(o0.posturaId);
   openForm({
-    title: `Ovo ${o0.ordem} — ${casalNome(casal(p.casalId))}`, data: o0,
+    title: `Ovo ${o0.ordem} — ${casalNome(casal(p.casalId))}`, data: { ...o0, ...dadosMortoNinho(o0, p) },
     fields: [
       { k: 'status', l: 'Status', t: 'seg', o: Object.entries(OVO) },
+      { k: 'nascimento', l: 'Data do nascimento', t: 'date', show: o => o.status === 'mortoNinho' },
+      { k: 'morte', l: 'Data da morte', t: 'date', show: o => o.status === 'mortoNinho' },
+      { k: 'causa', l: 'Causa (se souber)', ph: 'Ex.: não alimentado, frio, esmagado no ninho', show: o => o.status === 'mortoNinho' },
       { k: 'data', l: 'Data da postura', t: 'date', req: 1 },
       { k: 'ordem', l: 'Ordem na postura', t: 'number' },
       { k: 'obs', l: 'Observação', t: 'textarea', ph: 'Ex.: ovo claro, casca fina' }
     ],
     save: o => {
       const virouEcl = o.status === 'eclodido' && o0.status !== 'eclodido';
+      const antes = o0.status, { nascimento, morte, causa } = o;
+      delete o.nascimento; delete o.morte; delete o.causa;
       Object.assign(o0, o, { ordem: parseInt(o.ordem) || o0.ordem });
+      if (o.status === 'mortoNinho') { registrarMortoNinho(o0, p, { nascimento, morte, causa, antes }); return; }
       if (virouEcl) setTimeout(() => ask('Ovo eclodido! Criar o registro do filhote agora?', () => { criarFilhotes(p, 1, today(), [], '', true); refresh(); toast('🐣 Filhote criado'); }, { ok: 'Criar filhote' }), 50);
     },
     del: () => ask('Excluir este ovo?', () => { db.ovos = db.ovos.filter(x => x !== o0); delDone(); }, { ok: 'Excluir', danger: true })
@@ -1470,7 +1497,7 @@ function formOvoscopia(pid) {
     save: d => {
       ov.forEach(o => {
         const s = d['o_' + o.id];
-        if (s && s !== o.status) { o.status = s; if (s === 'infertil' && !o.obs) o.obs = 'Ovo claro na ovoscopia'; }
+        if (s && s !== o.status) { const antes = o.status; o.status = s; if (s === 'mortoNinho') registrarMortoNinho(o, postura(pid), { ...dadosMortoNinho(o, postura(pid)), antes }); if (s === 'infertil' && !o.obs) o.obs = 'Ovo claro na ovoscopia'; }
       });
       toast('Ovoscopia registrada');
     }
@@ -2002,7 +2029,7 @@ const EXP = {
     ['Vendedor', 'vendedor'], ['Data aquisição', a => fmt(a.dataAquisicao)], ['Valor pago', 'valorPago'], ['Anilha original', 'anilhaOriginal'], ['Nascimento', a => a.dataNascimento ? fmt(a.dataNascimento) : ''], ['Pai', 'pai'], ['Mãe', 'mae'],
     ['Data saída', a => a.dataSaida ? fmt(a.dataSaida) : ''], ['Motivo/destino', 'motivoSaida'], ['Valor venda', 'valorVenda'], ['Observações', 'obs']] },
   casais: { n: 'Casais', rows: () => db.casais, cols: [['Macho', 'macho'], ['Fêmea', 'femea'], ['Viveiro', 'viveiro'], ['Formação', c => fmt(c.dataFormacao)], ['Separação', c => c.dataSeparacao ? fmt(c.dataSeparacao) : ''], ['Linhagem', linCasal], ['Posturas', c => stats({ casalId: c.id }).posturas], ['Filhotes', c => stats({ casalId: c.id }).fil], ['Observações', 'obs']] },
-  posturas: { n: 'Posturas', rows: () => db.posturas, cols: [['Casal', p => casalNome(casal(p.casalId))], ['Temporada', p => temporada(p.dataInicio)], ['Início', p => fmt(p.dataInicio)], ['Nº ovos', p => ovosDe(p.id).length], ['Último ovo', p => fmt(ultimoOvo(p))], ['Eclosão prevista', p => fmt(previsao(p))], ['Eclodidos', p => ovosDe(p.id).filter(o => o.status === 'eclodido').length], ['Status', 'status'], ['Observações', 'obs']] },
+  posturas: { n: 'Posturas', rows: () => db.posturas, cols: [['Casal', p => casalNome(casal(p.casalId))], ['Temporada', p => temporada(p.dataInicio)], ['Início', p => fmt(p.dataInicio)], ['Nº ovos', p => ovosDe(p.id).length], ['Último ovo', p => fmt(ultimoOvo(p))], ['Eclosão prevista', p => fmt(previsao(p))], ['Eclodidos', p => ovosDe(p.id).filter(o => nasceu(o.status)).length], ['Status', 'status'], ['Observações', 'obs']] },
   ovos: { n: 'Ovos', rows: () => db.ovos, cols: [['Casal', o => casalNome(casal(postura(o.posturaId)?.casalId))], ['Início postura', o => fmt(postura(o.posturaId)?.dataInicio)], ['Ordem', 'ordem'], ['Data', o => fmt(o.data)], ['Status', o => OVO[o.status]], ['Observação', 'obs']] },
   chocos: { n: 'Chocos', rows: () => db.chocos, cols: [['Fêmea', 'femea'], ['Casal', c => casalNome(casal(postura(c.posturaId)?.casalId))], ['Início', c => fmt(c.dataInicio)], ['Eclosão prevista', c => postura(c.posturaId) ? fmt(previsao(postura(c.posturaId))) : ''], ['Status', c => CHOCO[c.status]], ['Observações', 'obs']] },
   chocoEventos: { n: 'Acompanhamento choco', rows: () => db.chocoEventos, cols: [['Fêmea', e => db.chocos.find(c => c.id === e.chocoId)?.femea || ''], ['Data', e => fmt(e.data)], ['Alimentação extra', e => e.alimentacaoExtra ? 'Sim' : 'Não'], ['Comportamento', e => SINAIS[e.sinal] || e.sinal], ['Observação', 'obs']] },

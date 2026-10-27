@@ -1,7 +1,7 @@
 /* Canaril — service worker: guarda o app para abrir sem internet.
    A página (index.html) é buscada na rede primeiro, para receber atualizações;
    bibliotecas e ícones vêm do cache. Dados (Supabase) nunca passam pelo cache. */
-const VERSAO = 'canaril-v1';
+const VERSAO = 'canaril-v2';
 const ESSENCIAIS = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
