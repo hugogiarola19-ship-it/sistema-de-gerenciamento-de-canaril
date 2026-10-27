@@ -203,6 +203,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
+const APP_VERSAO = '2026.10.27'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -2101,6 +2102,7 @@ function sDados() {
         <div class="acts"><button class="btn" data-act="cfg">⚙️ Alterar</button></div></div>
       <div class="card"><h3 style="margin-top:0">Ajuda e testes</h3>
         <div class="acts"><button class="btn" data-act="ajuda">📖 Guia rápido</button><button class="btn" data-act="seed">🧪 Carregar dados de exemplo</button><button class="btn bad" data-act="wipe">Apagar tudo</button></div></div>
+      <p class="mu">Versão do app: <b>${APP_VERSAO}</b></p>
       <p class="mu">${db.aves.length} aves · ${db.casais.length} casais · ${db.posturas.length} posturas · ${db.ovos.length} ovos · ${db.manejos.length} registros de manejo</p>`
   };
 }
