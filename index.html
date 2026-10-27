@@ -46,7 +46,8 @@
 
   .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 8px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--ac); color: var(--ac-tx); }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ac); }
-  .top h1 { font-size: 18px; flex: 1; }
+  .top h1 { font-size: 18px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top h1[data-act] { cursor: pointer; }
   .top button { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
   .top button:active { background: rgba(0,0,0,.08); }
 
@@ -183,7 +184,7 @@
 <body>
 
 <header class="top">
-  <h1>🐤 Canaril</h1>
+  <h1 id="titulo">🐤 Canaril</h1>
   <span id="sync" class="sync" role="status"></span>
   <button data-act="menu" aria-label="Dados, exportação e ajuda">☰</button>
 </header>
@@ -210,7 +211,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27c'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.10.27d'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -842,7 +843,14 @@ const F = {
   home: { q: '' }
 };
 
+/* Cabeçalho: nome do criatório do usuário (ou "Canaril"); toque abre o perfil */
+function titulo() {
+  const h = $('#titulo'), nome = (!authGate && (db.perfil.criatorio || db.perfil.nome)) || 'Canaril';
+  h.textContent = '🐤 ' + nome;
+  if (authGate) { h.removeAttribute('data-act'); h.removeAttribute('title'); } else { h.dataset.act = 'perfil'; h.title = 'Meu perfil'; }
+}
 function render() {
+  titulo();
   document.querySelector('.tabs').hidden = authGate;
   document.querySelector('.top [data-act=menu]').hidden = authGate;
   if (authGate) { curList = null; $('#main').innerHTML = loginHTML(); return; }
@@ -889,7 +897,6 @@ VIEWS.home = () => {
   return `
     ${syncState === 'ro' ? `<div class="alert a-warn"><div class="ic">📱</div><div class="grow"><b>Seus dados estão só neste aparelho</b><div class="mu">${cloud && cloud.name === 'supabase' ? 'A sua conta não conseguiu gravar na nuvem. Saia e entre de novo pelo menu ☰; até lá, faça backups.' : 'Seu acesso a este link não permite salvar na nuvem. Peça a quem compartilhou para te convidar como Editor. Até lá, faça backups pelo menu ☰.'}</div></div></div>` : ''}
     ${storageOk ? '' : '<div class="alert a-bad"><div class="ic">⚠️</div><div>O navegador não está permitindo salvar. Exporte um backup antes de fechar a página.</div></div>'}
-    ${db.perfil.nome ? `<div class="li" data-act="perfil"><div class="sx sx-I">👤</div><div class="grow"><b>${esc(db.perfil.criatorio || db.perfil.nome)}</b><div class="mu">${esc(db.perfil.criatorio ? db.perfil.nome : '')}${db.perfil.criatorio && db.clubes.length ? ' · ' : ''}${db.clubes.length ? esc(db.clubes.map(c => c.sigla || c.nome).join(', ')) : ''}</div></div></div>` : ''}
     <input class="search" type="search" placeholder="🔍 Buscar pela anilha…" data-f="home.q" value="${esc(F.home.q)}" id="homeQ" autocomplete="off">
     <div id="list"></div>
     <div class="quick">
