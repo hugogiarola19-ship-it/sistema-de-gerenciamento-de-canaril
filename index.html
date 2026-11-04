@@ -178,6 +178,15 @@
   #toast.on { opacity: 1; }
   .empty { text-align: center; color: var(--mu); padding: 28px 12px; }
   label.ck { padding: 6px 0; cursor: pointer; }
+  .ingr { display: grid; grid-template-columns: 1fr 74px 36px; gap: 6px; align-items: end; padding: 8px 0; border-bottom: 1px solid var(--bd); }
+  .ingr .mais { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ingr input { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--bd); background: var(--card); font-size: 15px; }
+  .ingr label { display: block; font-size: 11px; color: var(--mu); margin-bottom: 2px; }
+  .ingr .rm { height: 40px; border-radius: 10px; border: 1px solid var(--bd); color: var(--bad); font-size: 18px; }
+  .ingr .obs { grid-column: 1 / -1; }
+  .calc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; }
+  .calc input, .calc select { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--bd); background: var(--card); font-size: 16px; }
+  .calc input { width: 92px; }
   label.ck .done { text-decoration: line-through; color: var(--mu); }
   .help ol, .help ul { padding-left: 20px; margin: 6px 0 12px; }
   .help li { margin-bottom: 4px; }
@@ -206,6 +215,7 @@
 <div id="toast" role="status"></div>
 <div id="dlg" class="dlg hidden" role="alertdialog" aria-modal="true"><div class="dbox"><p id="dlgMsg"></p><div class="acts" style="justify-content:flex-end"><button class="btn" id="dlgNo">Cancelar</button><button class="btn pri" id="dlgYes">Confirmar</button></div></div></div>
 <input type="file" id="fileIn" accept="application/json,.json" class="hidden">
+<input type="file" id="fileAlim" accept=".xlsx,.xls,.csv" class="hidden">
 
 <script>
 'use strict';
@@ -213,7 +223,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.10.27f'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.11.04'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -278,13 +288,13 @@ function toast(msg) {
    ============================================================ */
 function blank() {
   return { aves: [], casais: [], posturas: [], ovos: [], chocos: [], chocoEventos: [], manejos: [], lembretes: [],
-           especies: [], clubes: [], lotesAnilhas: [], eventos: [], inscricoes: [], perfil: {},
+           especies: [], clubes: [], lotesAnilhas: [], eventos: [], inscricoes: [], alimentos: [], perfil: {},
            cfg: { diasEclosao: 13, inicioTemporada: 7, ultimoBackup: '', especiePadrao: '' } };
 }
 /* Completa dados antigos: cria as espécies padrão e liga cada ave a uma espécie. Retorna true se mudou algo. */
 function migrate(d) {
   let ch = false;
-  ['especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'].forEach(k => { if (!Array.isArray(d[k])) { d[k] = []; ch = true; } });
+  ['especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes', 'alimentos'].forEach(k => { if (!Array.isArray(d[k])) { d[k] = []; ch = true; } });
   if (!d.perfil || typeof d.perfil !== 'object' || Array.isArray(d.perfil)) { d.perfil = {}; ch = true; }
   if (!d.especies.length) {
     d.especies = ESPECIES_PADRAO.map(e => ({ ...e, diasEclosao: e.id === 'esp-canario' && +d.cfg.diasEclosao ? +d.cfg.diasEclosao : e.diasEclosao }));
@@ -326,7 +336,7 @@ function save() {
 const SUPABASE_URL = 'https://eiqbpeezohahzizvffcu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_roBKI9cuvFF4_-gwm1ReJQ_eOjfhjIx'; // chave pública (publishable) do projeto: pode ficar no código; nunca use a secret/service_role aqui
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js';
-const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes'];
+const TABLES = ['aves', 'casais', 'posturas', 'ovos', 'chocos', 'chocoEventos', 'manejos', 'lembretes', 'especies', 'clubes', 'lotesAnilhas', 'eventos', 'inscricoes', 'alimentos'];
 const CHUNK = 300;
 let cloud = null, stopWatch = null, syncTimer = null, syncing = false, syncAgain = false, cloudRev = '', syncState = 'local';
 const myTag = uid(), lastSent = {};
@@ -842,6 +852,7 @@ function alertas() {
    ============================================================ */
 let view = 'home', curList = null;
 const sub = { repro: 'posturas', manejo: 'hist', torneios: 'eventos' };
+const calcAlim = {}; // valores digitados na calculadora de cada receita (mantidos ao redesenhar)
 const F = {
   aves: { q: '', sit: 'ativos', sexo: '', cor: '', raca: '', temp: '', casal: '', esp: '' },
   post: { temp: '', casal: '', st: 'ativa', ord: 'gaiola' },
@@ -1104,7 +1115,13 @@ function filhotesList() {
 }
 
 VIEWS.manejo = () => {
-  const head = subtabs('manejo', [['hist', '📋 Histórico'], ['lemb', '🔔 Lembretes']]);
+  const head = subtabs('manejo', [['hist', '📋 Histórico'], ['lemb', '🔔 Lembretes'], ['alim', '🌾 Alimentação']]);
+  if (sub.manejo === 'alim') {
+    curList = alimList;
+    return head + `<p class="mu" style="margin-bottom:8px">Cadastre as misturas de sementes, farinhadas e suplementos que você usa. A calculadora mostra quanto vai de cada item e quantos pacotes comprar.</p>
+      <div id="list"></div>
+      <div class="acts"><button class="btn pri" data-act="novoAlim">＋ Nova receita</button><button class="btn" data-act="importAlim">📥 Importar planilha</button></div>`;
+  }
   if (sub.manejo === 'lemb') {
     curList = lembList;
     return head + '<div id="list"></div><button class="btn pri full" data-act="novoLemb">＋ Novo lembrete</button>';
@@ -1229,7 +1246,7 @@ function readForm(form, fields) {
   return o;
 }
 function applyShow(ent) {
-  const form = sheet.querySelector('form'); if (!form) return;
+  const form = sheet.querySelector('form'); if (!form || !ent.fields) return;
   const o = readForm(form, ent.fields);
   ent.fields.forEach(f => { if (f.show) form.querySelector(`[data-k="${f.k}"]`).classList.toggle('hidden', !f.show(o)); });
 }
@@ -1252,7 +1269,7 @@ function openForm(cfg) {
 }
 sheet.addEventListener('submit', e => {
   e.preventDefault();
-  const top = stack[stack.length - 1]; if (!top || !top.form) return;
+  const top = stack[stack.length - 1]; if (!top || !top.form || !top.fields) return;
   const o = readForm(e.target, top.fields);
   const miss = top.fields.find(f => f.req && (o[f.k] === '' || o[f.k] == null) && !(f.show && !f.show(o)));
   if (miss) { toast('Preencha: ' + miss.l); return; }
@@ -2074,6 +2091,178 @@ function formEsp(e) {
 }
 
 /* ============================================================
+   Alimentação: receitas de misturas, farinhadas e suplementos, com calculadora
+   ============================================================ */
+const TIPO_ALIM = { mistura: 'Mistura de sementes', farinhada: 'Farinhada', suplemento: 'Suplemento / vitamina', verdura: 'Verduras e frutas', outro: 'Outro' };
+const TIPO_ALIM_IC = { mistura: '🌾', farinhada: '🥣', suplemento: '💊', verdura: '🥬', outro: '🍽️' };
+const num = v => { if (v === '' || v == null) return NaN; if (typeof v === 'number') return v; const t = String(v).trim(); return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); };
+const fmtNum = (n, d = 2) => Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: d }) : '—';
+const somaPct = a => (a.ingredientes || []).reduce((t, g) => t + (Number(g.pct) || 0), 0);
+function alimList() {
+  const L = [...db.alimentos].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return L.length ? L.map(a => {
+    const sp = somaPct(a), ok = Math.abs(sp - 100) < 0.01;
+    return `<div class="li" data-act="alim" data-id="${a.id}"><div class="sx sx-I">${TIPO_ALIM_IC[a.tipo] || '🍽️'}</div>
+      <div class="grow"><b>${esc(a.nome)}</b><div class="mu">${esc([TIPO_ALIM[a.tipo], a.fase].filter(Boolean).join(' · '))}</div>
+      <div class="mu">${(a.ingredientes || []).length} item(ns): ${esc((a.ingredientes || []).slice(0, 4).map(g => g.nome).join(', '))}${(a.ingredientes || []).length > 4 ? '…' : ''}</div></div>
+      <span class="bdg ${ok ? 'b-ok' : 'b-warn'}">${fmtNum(sp, 1)}%</span></div>`;
+  }).join('') : '<div class="empty">Nenhuma receita ainda. Cadastre a sua mistura de sementes ou importe a sua planilha.</div>';
+}
+/* Calcula as quantidades: a partir de X kg do ingrediente base, ou do total desejado */
+function calcularAlim(a, st) {
+  const ing = a.ingredientes || [], base = ing.find(g => g.nome === st.base);
+  let total = NaN;
+  if (st.modo === 'base' && base && Number(base.pct) > 0) total = num(st.qtd) / (Number(base.pct) / 100);
+  if (st.modo === 'total') total = num(st.qtd);
+  const linhas = ing.map(g => { const kg = total * (Number(g.pct) || 0) / 100, emb = num(g.emb); return { ...g, kg, pac: Number.isFinite(kg) && emb > 0 ? Math.ceil(kg / emb - 1e-9) : NaN }; });
+  return { total, linhas };
+}
+function tabelaAlim(a) {
+  const st = calcAlim[a.id], { total, linhas } = calcularAlim(a, st), sp = somaPct(a);
+  return `<div class="tbl"><table><thead><tr><th>Ingrediente</th><th>%</th><th>Qtd. (kg)</th><th>Pacotes</th><th>Emb. (kg)</th><th>Código</th></tr></thead><tbody>
+    ${linhas.map(g => `<tr><td>${esc(g.nome)}${g.obs ? `<div class="mu" style="white-space:normal;max-width:180px">${esc(g.obs)}</div>` : ''}</td><td>${fmtNum(Number(g.pct), 2)}%</td><td><b>${fmtNum(g.kg, 3)}</b></td><td>${fmtNum(g.pac, 0)}</td><td>${fmtNum(num(g.emb), 2)}</td><td>${esc(g.codigo || '—')}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>Total</td><td>${fmtNum(sp, 2)}%</td><td>${fmtNum(total, 3)}</td><td></td><td></td><td></td></tr></tfoot></table></div>
+    ${Math.abs(sp - 100) < 0.01 ? '' : `<div class="alert a-warn" style="cursor:default"><div class="ic">⚠️</div><div>A soma dos percentuais é <b>${fmtNum(sp, 2)}%</b>. Ajuste a receita para fechar 100%.</div></div>`}`;
+}
+function sAlim(id) {
+  return {
+    html: () => {
+      const a = db.alimentos.find(x => x.id === id); if (!a) return '<div class="empty">Receita não encontrada.</div>';
+      const ing = a.ingredientes || [];
+      if (!calcAlim[id]) calcAlim[id] = { modo: a.base && ing.some(g => g.nome === a.base) ? 'base' : 'total', base: a.base && ing.some(g => g.nome === a.base) ? a.base : (ing[0]?.nome || ''), qtd: a.qtdBase || 10 };
+      const st = calcAlim[id];
+      return `<h2>${TIPO_ALIM_IC[a.tipo] || '🍽️'} ${esc(a.nome)}</h2>
+        <div class="mu">${esc([TIPO_ALIM[a.tipo], a.fase].filter(Boolean).join(' · '))}</div>
+        ${a.obs ? `<p class="mu" style="margin-top:6px">📝 ${esc(a.obs)}</p>` : ''}
+        <h3>Calculadora</h3>
+        <div class="calc" data-calc="${id}">
+          <select data-c="modo" aria-label="Como calcular"><option value="base" ${st.modo === 'base' ? 'selected' : ''}>Tenho</option><option value="total" ${st.modo === 'total' ? 'selected' : ''}>Quero preparar</option></select>
+          <input data-c="qtd" inputmode="decimal" value="${esc(st.qtd)}" aria-label="Quantidade em kg"> <span>kg</span>
+          <select data-c="base" aria-label="Ingrediente base" ${st.modo === 'base' ? '' : 'hidden'}>${ing.map(g => `<option ${g.nome === st.base ? 'selected' : ''}>${esc(g.nome)}</option>`).join('')}</select>
+          <span class="calcTotal" ${st.modo === 'total' ? '' : 'hidden'}>de mistura pronta</span>
+        </div>
+        <div id="calcOut">${tabelaAlim(a)}</div>
+        <div class="acts">
+          <button class="btn" data-act="editAlim" data-id="${id}">✏️ Editar</button>
+          <button class="btn" data-act="dupAlim" data-id="${id}">📄 Duplicar</button>
+          <button class="btn" data-act="xlsAlim" data-id="${id}">⬇️ Excel</button>
+          <button class="btn bad" data-act="delAlim" data-id="${id}">Excluir</button>
+        </div>`;
+    }
+  };
+}
+sheet.addEventListener('input', e => {
+  const box = e.target.closest('[data-calc]'); if (!box) return;
+  const id = box.dataset.calc, a = db.alimentos.find(x => x.id === id), st = calcAlim[id]; if (!a || !st) return;
+  st[e.target.dataset.c] = e.target.value;
+  if (e.target.dataset.c === 'modo') { box.querySelector('[data-c=base]').hidden = st.modo !== 'base'; box.querySelector('.calcTotal').hidden = st.modo !== 'total'; }
+  $('#calcOut').innerHTML = tabelaAlim(a);
+});
+function ingrRow(g) {
+  return `<div class="ingr">
+    <div><label>Ingrediente</label><input data-i="nome" value="${esc(g.nome || '')}" placeholder="Ex.: Alpiste"></div>
+    <div><label>% da mistura</label><input data-i="pct" inputmode="decimal" value="${esc(g.pct ?? '')}" placeholder="65"></div>
+    <button type="button" class="rm" data-act="ingRem" aria-label="Remover ingrediente">✕</button>
+    <div class="mais"><div><label>Código / marca</label><input data-i="codigo" value="${esc(g.codigo || '')}"></div><div><label>Embalagem (kg)</label><input data-i="emb" inputmode="decimal" value="${esc(g.emb ?? '')}"></div></div>
+    <div class="obs"><label>Observação</label><input data-i="obs" value="${esc(g.obs || '')}" placeholder="Ex.: oleaginosa, não exagerar"></div>
+  </div>`;
+}
+function lerIngr() {
+  return [...sheet.querySelectorAll('.ingr')].map(r => { const v = k => r.querySelector(`[data-i=${k}]`).value.trim(); return { nome: v('nome'), pct: num(v('pct')), codigo: v('codigo'), emb: v('emb') === '' ? '' : num(v('emb')), obs: v('obs') }; }).filter(g => g.nome);
+}
+function somaIngr() {
+  const el = $('#somaIngr'); if (!el) return;
+  const sp = lerIngr().reduce((t, g) => t + (Number.isFinite(g.pct) ? g.pct : 0), 0);
+  el.innerHTML = `Soma: <b>${fmtNum(sp, 2)}%</b> ${Math.abs(sp - 100) < 0.01 ? '✅' : '— ajuste para 100%'}`;
+}
+let alimEditando = null;
+function formAlim(a, pre) {
+  alimEditando = a || null;
+  const d = a || pre || { tipo: 'mistura', ingredientes: [{}, {}, {}] };
+  const ent = {
+    form: true,
+    html: () => `<h2>${a ? 'Editar receita' : 'Nova receita'}</h2>
+      <form onsubmit="return false" novalidate>
+      <div class="fld"><label for="alNome">Nome *</label><input id="alNome" value="${esc(d.nome || '')}" placeholder="Ex.: Mistura de manutenção"></div>
+      <div class="fld"><label>Tipo</label><div class="segs">${Object.entries(TIPO_ALIM).map(([k, l]) => `<label class="seg"><input type="radio" name="alTipo" value="${k}" ${k === (d.tipo || 'mistura') ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+      <div class="fld"><label for="alFase">Uso / fase</label><input id="alFase" value="${esc(d.fase || '')}" placeholder="Ex.: Manutenção, reprodução, muda, filhotes"></div>
+      <div class="fld"><label for="alBase">Ingrediente base da calculadora</label><input id="alBase" value="${esc(d.base || '')}" placeholder="Ex.: Alpiste (o que você compra em saco fechado)"></div>
+      <div class="fld"><label for="alQtd">Quantidade padrão da base (kg)</label><input id="alQtd" inputmode="decimal" value="${esc(d.qtdBase ?? 10)}"></div>
+      <h3>Ingredientes</h3>
+      <div id="ingrs">${(d.ingredientes || []).map(ingrRow).join('')}</div>
+      <p class="mu" id="somaIngr" style="margin:8px 0"></p>
+      <div class="acts"><button type="button" class="btn" data-act="ingAdd">＋ Ingrediente</button></div>
+      <div class="fld" style="margin-top:12px"><label for="alObs">Observações</label><textarea id="alObs" rows="2">${esc(d.obs || '')}</textarea></div>
+      <div class="factions"><button type="button" class="btn pri" data-act="alimSalvar">Salvar</button></div></form>`,
+    after: () => somaIngr()
+  };
+  showSheet(ent);
+}
+sheet.addEventListener('input', e => { if (e.target.closest('.ingr')) somaIngr(); });
+function salvarAlim() {
+  const nome = $('#alNome').value.trim(); if (!nome) { toast('Informe o nome da receita'); return; }
+  const ingredientes = lerIngr();
+  if (!ingredientes.length) { toast('Adicione pelo menos um ingrediente'); return; }
+  const semPct = ingredientes.find(g => !Number.isFinite(g.pct)); if (semPct) { toast('Informe o % de ' + semPct.nome); return; }
+  const rec = { nome, tipo: sheet.querySelector('[name=alTipo]:checked')?.value || 'mistura', fase: $('#alFase').value.trim(), base: $('#alBase').value.trim(), qtdBase: num($('#alQtd').value) || '', obs: $('#alObs').value.trim(), ingredientes };
+  let id;
+  if (alimEditando) { Object.assign(alimEditando, rec); id = alimEditando.id; delete calcAlim[id]; }
+  else { id = uid(); db.alimentos.push({ id, ...rec }); }
+  const sp = ingredientes.reduce((t, g) => t + g.pct, 0);
+  stack.pop(); if (alimEditando) stack.pop();
+  refresh(); showSheet(sAlim(id));
+  toast(Math.abs(sp - 100) < 0.01 ? 'Receita salva' : `Receita salva — a soma está em ${fmtNum(sp, 2)}%`);
+}
+/* Importa uma planilha de mistura: procura a linha de cabeçalho com o nome do item e a coluna de % */
+async function importarAlim(file) {
+  let X; try { X = await loadXLSX(); } catch (e) { toast('Sem internet para ler a planilha. Tente de novo conectado.'); return; }
+  const wb = X.read(await file.arrayBuffer(), { type: 'array' });
+  for (const nomeAba of wb.SheetNames) {
+    const rows = X.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: '' });
+    const hi = rows.findIndex(r => r.some(c => /semente|ingrediente|item|produto|alimento/i.test(String(c))) && r.some(c => /%/.test(String(c))));
+    if (hi < 0) continue;
+    const H = rows[hi].map(c => String(c)), col = re => H.findIndex(c => re.test(c));
+    const cN = col(/semente|ingrediente|item|produto|alimento/i), cP = col(/%/), cC = col(/c[óo]digo|marca/i), cE = col(/embalagem|pacote \(kg\)/i), cO = col(/obs/i);
+    const ingredientes = [];
+    for (let i = hi + 1; i < rows.length; i++) {
+      const r = rows[i], nome = String(r[cN] ?? '').trim();
+      if (!nome || /^total/i.test(nome)) { if (ingredientes.length) break; else continue; }
+      let pct = typeof r[cP] === 'number' ? r[cP] : num(String(r[cP]).replace('%', ''));
+      if (!Number.isFinite(pct)) continue;
+      if (typeof r[cP] === 'number' && pct <= 1.0001) pct = Math.round(pct * 100000) / 1000;
+      ingredientes.push({ nome, pct, codigo: cC >= 0 ? String(r[cC] ?? '').trim() : '', emb: cE >= 0 && r[cE] !== '' ? num(r[cE]) : '', obs: cO >= 0 ? String(r[cO] ?? '').trim() : '' });
+    }
+    if (!ingredientes.length) continue;
+    // Título: primeira célula de texto acima do cabeçalho; base: rótulo "<ingrediente> comprado (kg)" com o número ao lado
+    const titulo = rows.slice(0, hi).flat().find(c => typeof c === 'string' && c.trim().length > 3) || file.name.replace(/\.[^.]+$/, '');
+    let base = '', qtdBase = '';
+    rows.slice(0, hi).forEach(r => r.forEach((c, j) => { if (/comprad|base/i.test(String(c)) && typeof r[j + 1] === 'number') { qtdBase = r[j + 1]; base = (ingredientes.find(g => new RegExp(g.nome.split(/[ /]/)[0], 'i').test(String(c))) || {}).nome || ''; } }));
+    if (!base) base = [...ingredientes].sort((a, b) => b.pct - a.pct)[0].nome;
+    const tipo = /farinhada/i.test(titulo) ? 'farinhada' : 'mistura';
+    formAlim(null, { nome: String(titulo).trim(), tipo, fase: '', base, qtdBase: qtdBase || 10, obs: 'Importado de ' + file.name, ingredientes });
+    toast(`${ingredientes.length} ingrediente(s) lidos. Confira e toque em Salvar.`);
+    return;
+  }
+  ask('Não encontrei uma tabela de ingredientes nessa planilha. Ela precisa ter uma linha de cabeçalho com "Semente" (ou "Ingrediente") e uma coluna de "%".', null, { only: true });
+}
+$('#fileAlim').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importarAlim(f).catch(() => toast('Não foi possível ler a planilha.')); });
+async function exportAlim(id) {
+  const a = db.alimentos.find(x => x.id === id), st = calcAlim[id], { total, linhas } = calcularAlim(a, st);
+  const aoa = [[a.nome], [st.modo === 'base' ? `Base: ${fmtNum(num(st.qtd), 3)} kg de ${st.base}` : `Mistura pronta: ${fmtNum(num(st.qtd), 3)} kg`], ['Peso total da mistura (kg)', Number.isFinite(total) ? Math.round(total * 1000) / 1000 : ''], [],
+    ['Ingrediente', '% da mistura', 'Quantidade (kg)', 'Código', 'Embalagem (kg)', 'Pacotes necessários', 'Observação'],
+    ...linhas.map(g => [g.nome, (Number(g.pct) || 0) / 100, Number.isFinite(g.kg) ? Math.round(g.kg * 1000) / 1000 : '', g.codigo || '', Number.isFinite(num(g.emb)) ? num(g.emb) : '', Number.isFinite(g.pac) ? g.pac : '', g.obs || '']),
+    ['Total', somaPct(a) / 100, Number.isFinite(total) ? Math.round(total * 1000) / 1000 : '']];
+  try {
+    const X = await loadXLSX(), ws = X.utils.aoa_to_sheet(aoa);
+    for (let r = 5; r < aoa.length; r++) { const c = ws[X.utils.encode_cell({ r, c: 1 })]; if (c) c.z = '0.0%'; }
+    ws['!cols'] = [{ wch: 26 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 40 }];
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Mistura');
+    const buf = X.write(wb, { bookType: 'xlsx', type: 'array' });
+    if (await download(new Blob([buf]), `${a.nome.replace(/[^\w\-]+/g, '_').slice(0, 40)}.xlsx`)) toast('Planilha exportada');
+  } catch (e) { toast('Sem internet para gerar a planilha.'); }
+}
+
+/* ============================================================
    Dados: exportação, backup, configurações e ajuda
    ============================================================ */
 const EXP = {
@@ -2092,6 +2281,7 @@ const EXP = {
   clubes: { n: 'Clubes', rows: () => db.clubes, cols: [['Clube', 'nome'], ['Sigla', 'sigla'], ['Federação', 'federacao'], ['Nº de criador', 'numeroCriador'], ['Anuidade até', c => c.anuidadeValidade ? fmt(c.anuidadeValidade) : ''], ['Contato', 'contato'], ['Observações', 'obs']] },
   lotesAnilhas: { n: 'Lotes de anilhas', rows: () => db.lotesAnilhas, cols: [['Clube', l => clube(l.clubeId)?.nome || ''], ['Ano', 'ano'], ['Espécie', l => especie(l.especieId)?.nome || 'Qualquer'], ['Primeira', l => loteAnilha(l, l.inicio)], ['Última', l => loteAnilha(l, l.fim)], ['Diâmetro', 'diametro'], ['Usadas', l => loteUso(l).usadas], ['Livres', l => loteUso(l).livres], ['Próxima livre', l => loteUso(l).prox]] },
   eventos: { n: 'Campeonatos', rows: () => db.eventos, cols: [['Evento', 'nome'], ['Tipo', e => TIPO_EVENTO[e.tipo] || ''], ['Organizador', e => clube(e.clubeId)?.nome || e.organizador || ''], ['Local', 'local'], ['Início', e => fmt(e.dataInicio)], ['Fim', e => e.dataFim ? fmt(e.dataFim) : ''], ['Prazo de inscrição', e => e.prazoInscricao ? fmt(e.prazoInscricao) : ''], ['Taxa por ave', 'taxa'], ['Inscrições', e => db.inscricoes.filter(i => i.eventoId === e.id).length]] },
+  alimentos: { n: 'Alimentação', rows: () => db.alimentos.flatMap(a => (a.ingredientes || []).map(g => ({ a, g }))), cols: [['Receita', x => x.a.nome], ['Tipo', x => TIPO_ALIM[x.a.tipo] || ''], ['Uso / fase', x => x.a.fase || ''], ['Ingrediente', x => x.g.nome], ['% da mistura', x => x.g.pct], ['Código', x => x.g.codigo || ''], ['Embalagem (kg)', x => x.g.emb], ['Observação', x => x.g.obs || '']] },
   inscricoes: { n: 'Inscrições', rows: () => db.inscricoes, cols: [['Evento', i => evento(i.eventoId)?.nome || ''], ['Data', i => fmt(evento(i.eventoId)?.dataInicio)], ['Modalidade', i => i.modalidade === 'equipe' ? 'Equipe' : 'Individual'], ['Anilha(s)', i => (i.anilhas || []).join(', ')], ['Classe', 'classe'], ['Juiz', 'juiz'], ['Pontos', 'pontos'], ['Colocação', 'colocacao'], ['Prêmio', 'premio'], ['Observações', 'obs']] },
   lembretes: { n: 'Lembretes', rows: () => db.lembretes, cols: [['Título', 'titulo'], ['Tipo', l => MANEJO[l.tipo]], ['A cada (dias)', 'intervaloDias'], ['Próxima', l => fmt(l.proxima)], ['Aplica-se a', alvoTxt], ['Ativo', l => l.ativo ? 'Sim' : 'Não']] }
 };
@@ -2324,6 +2514,12 @@ function seedNow() {
   M('AG 24 120', -15, 'pesagem', { peso: 24.5 });
   db.manejos.push({ id: uid(), anilha: '', local: 'Todos os viveiros', data: D(-8), tipo: 'limpeza', peso: '', produto: '', dose: '', obs: 'Troca de forro e lavagem de bebedouros' });
 
+  db.alimentos.push(
+    { id: uid(), nome: 'Mistura de sementes (exemplo)', tipo: 'mistura', fase: 'Manutenção', base: 'Alpiste', qtdBase: 10, obs: 'Exemplo: troque pelos percentuais do seu criatório.', ingredientes: [
+      { nome: 'Alpiste', pct: 70, codigo: '', emb: 10, obs: 'Base da mistura' }, { nome: 'Painço', pct: 10, codigo: '', emb: 5, obs: '' }, { nome: 'Aveia sem casca', pct: 8, codigo: '', emb: 5, obs: '' },
+      { nome: 'Níger', pct: 4, codigo: '', emb: 1, obs: 'Oleaginosa: não exagerar' }, { nome: 'Linhaça', pct: 4, codigo: '', emb: 1, obs: '' }, { nome: 'Colza', pct: 4, codigo: '', emb: 5, obs: 'Oleaginosa: não exagerar' }] },
+    { id: uid(), nome: 'Farinhada de reprodução (exemplo)', tipo: 'farinhada', fase: 'Reprodução / filhotes', base: '', qtdBase: 1, obs: 'Servir fresca, de manhã.', ingredientes: [
+      { nome: 'Farinhada comercial', pct: 85, codigo: '', emb: 1, obs: '' }, { nome: 'Ovo cozido', pct: 10, codigo: '', emb: '', obs: 'Amassado' }, { nome: 'Couve picada', pct: 5, codigo: '', emb: '', obs: 'Lavada' }] });
   const L = (titulo, tipo, int, prox, alvoTipo, alvo = '') => db.lembretes.push({ id: uid(), titulo, tipo, intervaloDias: int, proxima: D(prox), alvoTipo, alvo, ativo: true, obs: '' });
   L('Vermifugação do plantel', 'vermifugacao', 90, 15, 'todas');
   L('Limpeza das gaiolas e viveiros', 'limpeza', 7, -1, 'geral');
@@ -2417,6 +2613,13 @@ const ACT = {
   pickNasc: id => { stack.pop(); formNasc(id); },
   qOvo: () => showSheet(sPick('addOvo')), qNasc: () => showSheet(sPick('nasc')),
   novoManejo: () => formManejo(), manejo: id => formManejoEdit(id),
+  novoAlim: () => formAlim(), alim: id => showSheet(sAlim(id)), editAlim: id => formAlim(db.alimentos.find(a => a.id === id)),
+  dupAlim: id => { const a = db.alimentos.find(x => x.id === id); const c = JSON.parse(JSON.stringify(a)); c.id = uid(); c.nome = a.nome + ' (cópia)'; db.alimentos.push(c); stack.pop(); refresh(); showSheet(sAlim(c.id)); toast('Receita duplicada'); },
+  delAlim: id => ask('Excluir esta receita?', () => { db.alimentos = db.alimentos.filter(a => a.id !== id); stack.pop(); refresh(); paint(); toast('Receita excluída'); }, { ok: 'Excluir', danger: true }),
+  xlsAlim: id => exportAlim(id), importAlim: () => $('#fileAlim').click(),
+  ingAdd: () => { $('#ingrs').insertAdjacentHTML('beforeend', ingrRow({})); somaIngr(); },
+  ingRem: (id, el) => { el.closest('.ingr').remove(); somaIngr(); },
+  alimSalvar: () => salvarAlim(),
   novoLemb: () => formLemb(), lemb: id => formLemb(db.lembretes.find(l => l.id === id)), feito: id => lembFeito(id),
   adiar: id => { const l = db.lembretes.find(x => x.id === id); l.proxima = addDays(l.proxima < today() ? today() : l.proxima, 1); refresh(); },
   goSexoI: () => { Object.assign(F.aves, { q: '', sit: 'ativos', sexo: 'I', cor: '', temp: '', casal: '' }); view = 'aves'; render(); },
