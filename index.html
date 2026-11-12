@@ -223,7 +223,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.11.04'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.11.12'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -1068,7 +1068,8 @@ function postCard(p, inSheet) {
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
     ${ov.length ? `<div class="mu">Último ovo ${fmt(ultimoOvo(p))} · eclosão prevista <b>${fmt(previsao(p))}</b></div>` : ''}
     ${ch ? `<div class="mu">🪺 Choco desde ${fmt(ch.dataInicio)} (${ch.status === 'chocando' ? 'dia ' + diaIncubacao(p) + ' de ' + espPostura(p).diasEclosao : CHOCO[ch.status].toLowerCase()})</div>` : ''}
-    ${fil.length ? `<div class="mu">🐣 ${fil.length} filhote(s): ${fil.map(a => `<button class="lk" data-act="ave" data-id="${a.id}">${esc(a.anilha)}</button>${a.situacao === 'morto' ? '†' : ''}`).join(', ')}</div>` : ''}
+    ${fil.length ? `<div class="mu">🐣 ${fil.length} filhote(s): ${fil.map(a => `<button class="lk" data-act="ave" data-id="${a.id}">${esc(a.anilha)}</button>${a.situacao === 'morto' ? '†' : ''}${a.ninho && a.ninho.casalId !== p.casalId && ativa(a) ? ` → ${esc(gaiolaCurta(casal(a.ninho.casalId)?.viveiro))}` : ''}`).join(', ')}</div>` : ''}
+    ${adotados(p).length ? `<div class="mu">🔄 Adotado(s) neste ninho: ${adotados(p).map(a => `<button class="lk" data-act="ave" data-id="${a.id}">${esc(a.anilha)}</button> <span>(de ${esc(gaiolaCurta(casal(filCasal(a))?.viveiro) || casalNome(casal(filCasal(a))))}, desde ${fmt(a.ninho.desde)})</span>`).join(', ')}</div>` : ''}
     ${p.obs ? `<div class="mu">📝 ${esc(p.obs)}</div>` : ''}
     <div class="acts">
       ${ativaP ? `<button class="btn sm" data-act="addOvo" data-id="${p.id}">＋ Ovo hoje</button>` : ''}
@@ -1076,6 +1077,8 @@ function postCard(p, inSheet) {
       ${ativaP || ch ? `<button class="btn sm" data-act="choco" data-id="${p.id}">🪺 Choco</button>` : ''}
       ${ativaP && ov.length ? `<button class="btn sm" data-act="nasc" data-id="${p.id}">🐣 Nascimento</button>` : ''}
       ${sa.length ? `<button class="btn sm" data-act="anilharPost" data-id="${p.id}">💍 Anilhar (${sa.length})</button>` : ''}
+      ${noNinho(p).length || semCadastro(p) ? `<button class="btn sm" data-act="mortesNinho" data-id="${p.id}">† Mortes</button>` : ''}
+      ${noNinho(p).length ? `<button class="btn sm" data-act="transferir" data-id="${p.id}">🔄 Transferir</button>` : ''}
       ${inSheet ? '' : `<button class="btn sm" data-act="postura" data-id="${p.id}">⋯ Mais</button>`}
     </div></div>`;
 }
@@ -1362,11 +1365,13 @@ function sAve(id) {
           ${a.origem === 'nascido' ? I('Nascimento', fmt(a.dataNascimento) + (a.dataNascimento && ativa(a) ? ` <span class="mu">(${idade(a.dataNascimento)})</span>` : '')) + I('Temporada', temporada(a.dataNascimento) || '—') + I('Pai', lk(a.pai)) + I('Mãe', lk(a.mae)) : ''}
           ${SIT_SAIDA.includes(a.situacao) ? I('Saída', fmt(a.dataSaida)) + I('Motivo / destino', esc(a.motivoSaida || '—')) + (a.situacao === 'vendido' ? I('Valor de venda', brl(a.valorVenda)) : '') : ''}
         </div>${a.obs ? `<p class="mu" style="margin-top:8px">📝 ${esc(a.obs)}</p>` : ''}
-        ${cid ? `<p class="mu" style="margin-top:6px">Casal: <button class="lk" data-act="casal" data-id="${cid}">${esc(casalNome(casal(cid)))}</button></p>` : ''}</div>
+        ${cid ? `<p class="mu" style="margin-top:6px">Casal: <button class="lk" data-act="casal" data-id="${cid}">${esc(casalNome(casal(cid)))}</button></p>` : ''}
+        ${a.ninho && casal(a.ninho.casalId) ? `<p class="mu" style="margin-top:4px">🔄 Criado no ninho de <button class="lk" data-act="casal" data-id="${a.ninho.casalId}">${esc(casalNome(casal(a.ninho.casalId)))}</button>${casal(a.ninho.casalId).viveiro ? ' (' + esc(casal(a.ninho.casalId).viveiro) + ')' : ''} desde ${fmt(a.ninho.desde)}</p>` : ''}</div>
         <div class="acts">
           <button class="btn" data-act="editAve" data-id="${a.id}">✏️ Editar</button>
           ${ativa(a) ? `<button class="btn" data-act="pesar" data-id="${a.id}">⚖️ Pesar</button><button class="btn" data-act="manejoAve" data-id="${a.id}">🩺 Manejo</button>` : ''}
           ${isSA(a.anilha) && ativa(a) ? `<button class="btn pri" data-act="anilhar" data-id="${a.id}">💍 Anilhar</button>` : ''}
+          ${ativa(a) && a.origem === 'nascido' && a.posturaId ? `<button class="btn" data-act="transferirAve" data-id="${a.id}">🔄 Trocar de ninho</button>` : ''}
           ${ativa(a) ? `<button class="btn" data-act="saida" data-id="${a.id}">↗️ Venda / saída</button><button class="btn bad" data-act="morte" data-id="${a.id}">† Morte</button>` : ''}
         </div>
         ${pesos.length ? `<h3>Pesagens</h3><div class="card">${pesos.slice(0, 8).map(m => `<div class="row"><span class="grow">${fmt(m.data)}</span><b>${m.peso.toLocaleString('pt-BR')} g</b></div>`).join('')}</div>` : ''}
@@ -1513,6 +1518,64 @@ function sPostura(id) {
         </div>`;
     }
   };
+}
+/* Filhotes no ninho: vivos nascidos nesta postura que não foram para outro ninho, mais os adotados de outros ninhos */
+const gaiolaCurta = v => v ? (gaiolaPartes(v).rot === 'Gaiola' ? 'G' + gaiolaPartes(v).num : v) : '';
+const adotados = p => db.aves.filter(a => ativa(a) && a.ninho && a.ninho.casalId === p.casalId && a.posturaId !== p.id && (a.ninho.desde || '') >= p.dataInicio);
+const noNinho = p => [...filhotesDe(p.id).filter(a => ativa(a) && (!a.ninho || a.ninho.casalId === p.casalId)), ...adotados(p)];
+const semCadastro = p => Math.max(0, ovosDe(p.id).filter(o => o.status === 'eclodido').length - filhotesDe(p.id).length);
+function formMortesNinho(pid) {
+  const p = postura(pid), L = noNinho(p), sc = semCadastro(p);
+  openForm({
+    title: '† Mortes no ninho — ' + casalNome(casal(p.casalId)), data: { data: today(), extra: 0 }, ok: 'Registrar',
+    intro: '<p class="mu" style="margin-bottom:10px">Marque os filhotes que morreram. Eles ficam com situação "morto" e entram na mortalidade de filhotes.</p>',
+    fields: [
+      ...L.map(a => ({ k: 'm_' + a.id, l: `${a.anilha}${a.posturaId !== p.id ? ' (adotado)' : ''} · nasc. ${fmt(a.dataNascimento)}`, t: 'check' })),
+      ...(sc ? [{ k: 'extra', l: `Filhotes sem cadastro que morreram (há ${sc} ovo(s) eclodido(s) sem filhote cadastrado)`, t: 'number' }] : []),
+      { k: 'data', l: 'Data da morte', t: 'date', req: 1 },
+      { k: 'causa', l: 'Causa (se souber)', ph: 'Ex.: não alimentados, frio, abandono da fêmea' }
+    ],
+    save: o => {
+      const sel = L.filter(a => o['m_' + a.id]), extra = Math.max(0, Math.min(sc, parseInt(o.extra) || 0));
+      if (!sel.length && !extra) return 'Marque pelo menos um filhote';
+      const motivo = 'Morreu no ninho' + (o.causa ? ': ' + o.causa : '');
+      sel.forEach(a => Object.assign(a, { situacao: 'morto', dataSaida: o.data, motivoSaida: motivo }));
+      if (extra) {
+        const nasc = ovosDe(pid).filter(x => x.status === 'eclodido').length ? (previsao(p) <= o.data ? previsao(p) : o.data) : o.data;
+        for (let i = 0; i < extra; i++) { criarFilhotes(p, 1, nasc, [], '', true); Object.assign(db.aves[db.aves.length - 1], { situacao: 'morto', dataSaida: o.data, motivoSaida: motivo }); }
+      }
+      toast(`† ${sel.length + extra} morte(s) registrada(s)`);
+    }
+  });
+}
+/* Transfere filhotes para o ninho de outro casal (ama): os pais verdadeiros continuam os mesmos */
+function formTransferir(pid, soAves) {
+  const p = postura(pid), L = soAves || noNinho(p);
+  const destinos = db.casais.filter(c => casalAtivo(c) && c.id !== (p ? p.casalId : '')).sort((a, b) => porGaiola(a.viveiro, b.viveiro));
+  if (!destinos.length) { toast('Não há outro casal ativo para receber o filhote'); return; }
+  const rot = c => { const pa = db.posturas.find(x => x.casalId === c.id && x.status === 'ativa'); return `${c.viveiro ? c.viveiro + ' · ' : ''}${casalNome(c)}${pa ? ' · postura de ' + fmt(pa.dataInicio) : ''}`; };
+  openForm({
+    title: '🔄 Transferir para outro ninho', data: { data: today(), destino: destinos[0].id, ...Object.fromEntries(L.length === 1 ? [['t_' + L[0].id, true]] : []) }, ok: 'Transferir',
+    intro: '<p class="mu" style="margin-bottom:10px">O filhote continua com os pais verdadeiros e passa a ser criado pelo casal escolhido. A troca fica registrada no histórico da ave.</p>',
+    fields: [
+      ...L.map(a => ({ k: 't_' + a.id, l: `${a.anilha} · nasc. ${fmt(a.dataNascimento)}`, t: 'check' })),
+      { k: 'destino', l: 'Para o ninho de', t: 'select', o: destinos.map(c => [c.id, rot(c)]) },
+      { k: 'data', l: 'Data da transferência', t: 'date', req: 1 },
+      { k: 'obs', l: 'Motivo / observação', ph: 'Ex.: irmãos morreram, fêmea não alimentava' }
+    ],
+    save: o => {
+      const sel = L.filter(a => o['t_' + a.id]); if (!sel.length) return 'Marque o filhote que vai ser transferido';
+      const dest = casal(o.destino);
+      sel.forEach(a => {
+        const de = a.ninho ? casal(a.ninho.casalId) : casal(filCasal(a));
+        a.ninho = { casalId: dest.id, desde: o.data };
+        if (dest.viveiro) a.local = dest.viveiro;
+        db.manejos.push({ id: uid(), anilha: a.anilha, local: dest.viveiro || '', data: o.data, tipo: 'outro', peso: '', produto: '', dose: '',
+          obs: `Transferido do ninho de ${de ? casalNome(de) + (de.viveiro ? ' (' + de.viveiro + ')' : '') : '—'} para o de ${casalNome(dest)}${dest.viveiro ? ' (' + dest.viveiro + ')' : ''}${o.obs ? '. ' + o.obs : ''}` });
+      });
+      toast(`🔄 ${sel.length} filhote(s) transferido(s) para ${dest.viveiro || casalNome(dest)}`);
+    }
+  });
 }
 /* "Morto no ninho": nasceu e morreu antes de sair do ninho. Mantém um filhote (S/A) com situação "morto",
    ligado ao ovo por filhoteId, para entrar na mortalidade de filhotes. */
@@ -2576,6 +2639,8 @@ const ACT = {
   manejoAve: id => formManejo({ alvo: 'ave', anilha: aveById(id).anilha, tipo: 'vermifugacao' }),
   qPeso: () => formManejo({ alvo: 'ave', tipo: 'pesagem' }),
   morte: id => formMorte(id), saida: id => formSaida(id), anilhar: id => formAnilhar([id]),
+  mortesNinho: id => formMortesNinho(id), transferir: id => formTransferir(id),
+  transferirAve: id => { const a = aveById(id), pid = a.ninho ? (db.posturas.filter(p => p.casalId === a.ninho.casalId).sort((x, y) => y.dataInicio.localeCompare(x.dataInicio))[0]?.id || a.posturaId) : a.posturaId; formTransferir(pid, [a]); },
   anilharPost: id => { const L = filhotesDe(id).filter(a => isSA(a.anilha) && ativa(a)); L.length ? formAnilhar(L.map(a => a.id)) : toast('Nenhum filhote sem anilha'); },
   clubes: () => showSheet(sClubes()), novoClube: () => formClube(), editClube: id => formClube(clube(id)),
   novoLote: id => formLote(null, id), editLote: id => formLote(db.lotesAnilhas.find(l => l.id === id)),
