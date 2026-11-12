@@ -119,11 +119,14 @@
   .e-fertil { background: #d8efdf; border-color: var(--ok); color: #1c5a37; }
   .e-infertil { background: #fffbe8; border-color: #d8cf9c; border-style: dashed; color: #8a7d3b; }
   .e-eclodido { background: var(--ac); border-color: #c79f00; color: #1d1d1b; }
+  .egg.e-adotado { position: relative; background: #d6ecff; border-color: #1d5fbf; color: #12407f; }
+  .egg.e-adotado::after { content: "↻"; position: absolute; right: -5px; top: -5px; width: 16px; height: 16px; border-radius: 50%; background: #1d5fbf; color: #fff; font-size: 11px; line-height: 16px; text-align: center; }
   .e-mortoNinho { background: #4a3b33; border-color: #c79f00; color: #f2c200; }
   .e-quebrado { background: #fde7e5; border-color: var(--bad); color: var(--bad); text-decoration: line-through; }
   .e-perdido { background: #555; border-color: #333; color: #eee; }
   .egg.add { border-style: dashed; color: var(--mu); font-size: 20px; border-radius: 12px; }
   .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--mu); }
+  .legend i.e-adotado { background: #d6ecff; border-color: #1d5fbf; }
   .legend i { display: inline-block; width: 12px; height: 14px; border-radius: 50%; border: 2px solid; vertical-align: -2px; margin-right: 3px; }
 
   .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -223,7 +226,7 @@
    Constantes e dicionários
    ============================================================ */
 const KEY = 'canaril.v1';
-const APP_VERSAO = '2026.11.12'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
+const APP_VERSAO = '2026.11.13'; // mostrada no menu ☰ para conferir se o aparelho já pegou a versão nova
 const SIT = ['ativo', 'reprodutor', 'reservado', 'vendido', 'doado', 'morto', 'descartado'];
 const SIT_ATIVA = ['ativo', 'reprodutor', 'reservado'];
 const SIT_SAIDA = ['vendido', 'doado', 'morto', 'descartado'];
@@ -1014,7 +1017,7 @@ VIEWS.repro = () => {
       ${sel('post.temp', optTemps('Todas as temporadas'), f.temp, 'Temporada')}
       ${sel('post.casal', optCasais('Todos os casais'), f.casal, 'Casal')}
     </div>
-    <div class="legend" style="margin-bottom:8px">${Object.keys(OVO).map(k => `<span><i class="e-${k}"></i>${OVO[k]}</span>`).join('')}</div>
+    <div class="legend" style="margin-bottom:8px">${Object.keys(OVO).map(k => `<span><i class="e-${k}"></i>${OVO[k]}</span>`).join('')}<span><i class="e-adotado"></i>Adotado</span></div>
     <div id="list"></div>
     <button class="btn pri full" data-act="novaPostura">＋ Nova postura</button>`;
 };
@@ -1064,6 +1067,7 @@ function postCard(p, inSheet) {
       <div class="grow"><div class="row" style="align-items:flex-start"><b class="grow">${esc(casalNome(c))}</b>${postBadge(p)}</div>
       <div class="mu">${multiEsp() ? esc(espPostura(p).nome) + ' · ' : ''}início ${fmt(p.dataInicio)} · temp. ${temporada(p.dataInicio)}</div></div></div>
     <div class="eggs">${ov.map(o => `<button class="egg e-${o.status}" data-act="ovo" data-id="${o.id}" aria-label="Ovo ${o.ordem}: ${OVO[o.status]}">${o.status === 'eclodido' ? '🐣' : o.status === 'mortoNinho' ? '†' : o.ordem}</button>`).join('')}
+      ${adotados(p).map(a => `<button class="egg e-adotado" data-act="ave" data-id="${a.id}" aria-label="Filhote adotado ${esc(a.anilha)}" title="Adotado: ${esc(a.anilha)}">🐣</button>`).join('')}
       ${ativaP ? `<button class="egg add" data-act="addOvo" data-id="${p.id}" aria-label="Registrar ovo hoje">＋</button>` : ''}</div>
     <div class="mu">${ov.length} ovo(s)${resumoOv ? ' · ' + resumoOv : ''}</div>
     ${ov.length ? `<div class="mu">Último ovo ${fmt(ultimoOvo(p))} · eclosão prevista <b>${fmt(previsao(p))}</b></div>` : ''}
@@ -1521,7 +1525,9 @@ function sPostura(id) {
 }
 /* Filhotes no ninho: vivos nascidos nesta postura que não foram para outro ninho, mais os adotados de outros ninhos */
 const gaiolaCurta = v => v ? (gaiolaPartes(v).rot === 'Gaiola' ? 'G' + gaiolaPartes(v).num : v) : '';
-const adotados = p => db.aves.filter(a => ativa(a) && a.ninho && a.ninho.casalId === p.casalId && a.posturaId !== p.id && (a.ninho.desde || '') >= p.dataInicio);
+// Adotado aparece só na postura mais recente do casal que recebeu o filhote (a iniciada até a data da transferência)
+const posturaDoNinho = a => db.posturas.filter(x => x.casalId === a.ninho.casalId && x.dataInicio <= (a.ninho.desde || '9999')).sort((x, y) => y.dataInicio.localeCompare(x.dataInicio))[0];
+const adotados = p => db.aves.filter(a => ativa(a) && a.ninho && a.ninho.casalId === p.casalId && a.posturaId !== p.id && posturaDoNinho(a)?.id === p.id);
 const noNinho = p => [...filhotesDe(p.id).filter(a => ativa(a) && (!a.ninho || a.ninho.casalId === p.casalId)), ...adotados(p)];
 const semCadastro = p => Math.max(0, ovosDe(p.id).filter(o => o.status === 'eclodido').length - filhotesDe(p.id).length);
 function formMortesNinho(pid) {
